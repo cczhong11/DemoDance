@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>DemoDance · Wireframe</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background: #f4f5f7;
+    color: #222;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ===== Top bar ===== */
+  .topbar {
+    height: 48px;
+    background: #fff;
+    border-bottom: 1px solid #e4e6eb;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+  }
+  .logo { font-weight: 700; font-size: 15px; letter-spacing: 0.5px; }
+  .project-name {
+    font-size: 13px; color: #666;
+    padding: 4px 10px; border: 1px dashed #ccc; border-radius: 4px;
+  }
+  .spacer { flex: 1; }
+  .btn-generate {
+    background: #111; color: #fff; border: none;
+    padding: 8px 16px; font-size: 13px; border-radius: 6px;
+    cursor: pointer;
+  }
+  .btn-ghost {
+    background: transparent; border: 1px solid #ddd;
+    padding: 7px 14px; font-size: 13px; border-radius: 6px;
+    cursor: pointer; color: #333;
+  }
+
+  /* ===== Layout ===== */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    height: calc(100vh - 48px);
+  }
+
+  /* ===== Left: workflow steps ===== */
+  .left {
+    padding: 24px 32px;
+    overflow-y: auto;
+    background: #f4f5f7;
+  }
+  .left h2 {
+    font-size: 13px; color: #888; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 16px;
+  }
+  .progress-bar {
+    display: flex; gap: 4px; margin-bottom: 24px;
+  }
+  .progress-seg {
+    flex: 1; height: 4px; background: #e4e6eb; border-radius: 2px;
+  }
+  .progress-seg.done { background: #111; }
+  .progress-seg.active { background: #666; }
+
+  .step {
+    background: #fff;
+    border: 1px solid #e4e6eb;
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    transition: border-color 0.15s;
+  }
+  .step.active { border-color: #111; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+  .step.done { background: #fafbfc; }
+
+  .step-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 10px;
+  }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #eee; color: #666;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+  }
+  .step.done .step-num { background: #111; color: #fff; }
+  .step.active .step-num { background: #111; color: #fff; }
+  .step-title { font-weight: 600; font-size: 14px; flex: 1; }
+  .step-status {
+    font-size: 11px; color: #888;
+    padding: 2px 8px; background: #f0f0f0; border-radius: 10px;
+  }
+  .step.done .step-status { background: #e8f5e8; color: #2a7a2a; }
+
+  .step-body {
+    font-size: 13px; color: #444;
+    line-height: 1.55;
+  }
+  .field {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: #fafafa;
+    border: 1px dashed #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #666;
+  }
+  .field-label {
+    font-size: 11px; color: #999;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .field-value { color: #222; }
+  .field-empty { color: #bbb; font-style: italic; }
+
+  .step-actions {
+    margin-top: 10px; display: flex; gap: 8px;
+  }
+  .mini-btn {
+    font-size: 11px; padding: 4px 10px;
+    background: #fff; border: 1px solid #ddd; border-radius: 4px;
+    cursor: pointer; color: #555;
+  }
+
+  /* ===== Right: chat panel ===== */
+  .right {
+    background: #fff;
+    border-left: 1px solid #e4e6eb;
+    display: flex; flex-direction: column;
+  }
+  .chat-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #e4e6eb;
+  }
+  .chat-header h3 { font-size: 14px; }
+  .chat-header p { font-size: 12px; color: #888; margin-top: 2px; }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .msg.ai {
+    background: #f4f5f7;
+    color: #222;
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+  .msg.user {
+    background: #111;
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+  .msg-tag {
+    font-size: 10px; color: #888; margin-bottom: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+
+  .chat-input {
+    padding: 14px 16px;
+    border-top: 1px solid #e4e6eb;
+    background: #fafbfc;
+  }
+  .input-box {
+    background: #fff;
+    border: 1px solid #d4d6db;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .input-box textarea {
+    border: none; outline: none; resize: none;
+    font-size: 13px; font-family: inherit;
+    min-height: 36px;
+    width: 100%;
+  }
+  .input-actions {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chip {
+    font-size: 11px; padding: 3px 8px;
+    background: #f0f0f0; border-radius: 4px; color: #555;
+    cursor: pointer;
+  }
+  .send-btn {
+    margin-left: auto;
+    background: #111; color: #fff; border: none;
+    width: 28px; height: 28px; border-radius: 6px;
+    cursor: pointer; font-size: 14px;
+  }
+
+  /* annotation labels */
+  .note {
+    position: fixed; background: #fff3c4;
+    padding: 4px 8px; font-size: 11px; border-radius: 4px;
+    color: #8a6d00; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">🎬 DemoDance</div>
+  <div class="project-name">Project: MyHackathonDemo</div>
+  <div class="spacer"></div>
+  <button class="btn-ghost">预览脚本</button>
+  <button class="btn-generate">✨ 生成视频</button>
+</div>
+
+<div class="layout">
+
+  <!-- ========== LEFT: Workflow ========== -->
+  <div class="left">
+    <h2>Video Script Workflow  ·  6 Steps</h2>
+
+    <div class="progress-bar">
+      <div class="progress-seg done"></div>
+      <div class="progress-seg done"></div>
+      <div class="progress-seg active"></div>
+      <div class="progress-seg"></div>
+      <div class="progress-seg"></div>
+      <div class="progress-seg"></div>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="step done">
+      <div class="step-head">
+        <div class="step-num">1</div>
+        <div class="step-title">目标用户 & 问题</div>
+        <div class="step-status">✓ 已完成</div>
+      </div>
+      <div class="step-body">
+        <div class="field">
+          <div class="field-label">Target User</div>
+          <div class="field-value">独立开发者、Hackathon 选手</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Problem</div>
+          <div class="field-value">能做出产品但做不出 launch 视频</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step done">
+      <div class="step-head">
+        <div class="step-num">2</div>
+        <div class="step-title">问题重要性 (联网佐证)</div>
+        <div class="step-status">✓ 已完成</div>
+      </div>
+      <div class="step-body">
+        <div class="field">
+          <div class="field-label">Web Evidence</div>
+          <div class="field-value">已抓取 3 条数据 · ProductHunt / X / HN</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 ACTIVE -->
+    <div class="step active">
+      <div class="step-head">
+        <div class="step-num">3</div>
+        <div class="step-title">产品亮相</div>
+        <div class="step-status">进行中…</div>
+      </div>
+      <div class="step-body">
+        <div class="field">
+          <div class="field-label">Logo</div>
+          <div class="field-value">📎 拖拽上传 / 由 AI 生成</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Product Name</div>
+          <div class="field-value">DemoDance</div>
+        </div>
+        <div class="field">
+          <div class="field-label">Slogan</div>
+          <div class="field-value field-empty">待填写…</div>
+        </div>
+        <div class="step-actions">
+          <button class="mini-btn">让 AI 提几个建议</button>
+          <button class="mini-btn">手动输入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="step">
+      <div class="step-head">
+        <div class="step-num">4</div>
+        <div class="step-title">功能介绍 (每条一小段话)</div>
+        <div class="step-status">待填</div>
+      </div>
+      <div class="step-body">
+        <div class="field">
+          <div class="field-label">Feature List</div>
+          <div class="field-value field-empty">＋ 添加第一个 feature</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="step">
+      <div class="step-head">
+        <div class="step-num">5</div>
+        <div class="step-title">技术说明</div>
+        <div class="step-status">待填</div>
+      </div>
+      <div class="step-body">
+        <div class="field">
+          <div class="field-label">Tech Stack</div>
+          <div class="field-value field-empty">Next.js / AI SDK / …</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="step">
+      <div class="step-head">
+        <div class="step-num">6</div>
+        <div class="step-title">未来 Impact</div>
+        <div class="step-status">待填</div>
+      </div>
+      <div class="step-body">
+        <div class="field">
+          <div class="field-label">Future Vision</div>
+          <div class="field-value field-empty">这个产品会如何改变…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========== RIGHT: Chat ========== -->
+  <div class="right">
+    <div class="chat-header">
+      <h3>💬 和 AI 一起写脚本</h3>
+      <p>自然语言告诉我，我帮你把左边的槽位填好</p>
+    </div>
+
+    <div class="chat-messages">
+      <div class="msg ai">
+        <div class="msg-tag">AI</div>
+        嗨！我们先从第一步开始吧 —— 你的 demo 是给谁看的？他们遇到了什么问题？
+      </div>
+      <div class="msg user">
+        我的用户是 Hackathon 选手，他们做完产品没时间做 launch 视频。
+      </div>
+      <div class="msg ai">
+        <div class="msg-tag">AI · 已写入 Step 1</div>
+        👍 已经填到左边"目标用户 & 问题"了。
+        现在我去联网找一些数据来支撑这个 problem，稍等…
+      </div>
+      <div class="msg ai">
+        <div class="msg-tag">AI · Step 3</div>
+        产品叫什么？如果还没想好，我可以基于你刚才说的内容提 3 个名字备选。
+      </div>
+      <div class="msg user">
+        就叫 DemoDance 吧，你帮我想个 slogan。
+      </div>
+    </div>
+
+    <div class="chat-input">
+      <div class="input-box">
+        <textarea placeholder="和 AI 聊聊，或直接写内容…"></textarea>
+        <div class="input-actions">
+          <span class="chip">📎 素材</span>
+          <span class="chip">🎨 Logo</span>
+          <span class="chip">🔗 链接</span>
+          <button class="send-btn">↑</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
