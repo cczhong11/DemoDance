@@ -45,6 +45,9 @@ type RenderSection = {
   durationSec: number;
   summary: string;
   version: number;
+  progress?: number;
+  apiState?: string;
+  taskId?: string;
 };
 
 function getInitialSteps(locale: "en" | "zh"): Step[] {
@@ -833,7 +836,64 @@ export default function Home() {
       );
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 700));
+    try {
+      const title = getRenderTitle(sectionId);
+      const summary = summarizeStep(sectionId);
+      const prompt = `Section: ${title}\nContent: ${summary}`;
+
+      const res = await fetch("/api/video/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!res.ok) throw new Error("Failed to start video task");
+
+      const data = await res.json();
+      const taskId = data.data?.task_id || data.task_id || data.data?.id || data.id;
+
+      if (taskId) {
+        setSectionRenders((prev) =>
+          prev.map((item) => (item.id === sectionId ? { ...item, taskId } : item))
+        );
+        while (true) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const statusRes = await fetch(`/api/video/tasks/${taskId}`);
+          const statusData = await statusRes.json();
+          
+          const state =
+            statusData.data?.status || statusData.data?.state || statusData.status || statusData.state;
+
+          let nextProgress: number | undefined = undefined;
+          const rawProgress = statusData.data?.progress ?? statusData.progress;
+          if (typeof rawProgress === "number") {
+            nextProgress = rawProgress;
+          } else if (typeof rawProgress === "string") {
+            const p = parseFloat(rawProgress);
+            if (!isNaN(p)) nextProgress = p;
+          }
+
+          setSectionRenders((prev) =>
+            prev.map((item) => {
+              if (item.id === sectionId) {
+                // If it's queued, we might not have progress yet.
+                return { ...item, progress: nextProgress ?? item.progress, apiState: state };
+              }
+              return item;
+            })
+          );
+          if (state === "succeeded") break;
+          if (state === "failed" || state === "cancelled") {
+            throw new Error(`Video task ${state}`);
+          }
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 700));
+      }
+    } catch (error) {
+      console.error("Video generation error:", error);
+      await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 700));
+    }
 
     setSectionRenders((prev) => {
       const current = prev.length ? prev : getDefaultRenderSections();
@@ -872,6 +932,39 @@ export default function Home() {
     setExportReady(false);
     setExportFileName(null);
     await generateOneSection(sectionId);
+  }
+
+  async function manualFetchStatus(sectionId: StepId) {
+    const section = sectionRenders.find((s) => s.id === sectionId);
+    if (!section || !section.taskId || section.status !== "generating") return;
+
+    try {
+      const statusRes = await fetch(`/api/video/tasks/${section.taskId}`);
+      const statusData = await statusRes.json();
+      
+      const state =
+        statusData.data?.status || statusData.data?.state || statusData.status || statusData.state;
+
+      let nextProgress: number | undefined = undefined;
+      const rawProgress = statusData.data?.progress ?? statusData.progress;
+      if (typeof rawProgress === "number") {
+        nextProgress = rawProgress;
+      } else if (typeof rawProgress === "string") {
+        const p = parseFloat(rawProgress);
+        if (!isNaN(p)) nextProgress = p;
+      }
+
+      setSectionRenders((prev) =>
+        prev.map((item) => {
+          if (item.id === sectionId) {
+            return { ...item, progress: nextProgress ?? item.progress, apiState: state };
+          }
+          return item;
+        })
+      );
+    } catch (error) {
+      console.error("Manual fetch failed", error);
+    }
   }
 
   async function combineAndExport() {
@@ -1595,7 +1688,9 @@ export default function Home() {
                           {section.status === "done"
                             ? tr(`Done · v${section.version}`, `已完成 · v${section.version}`)
                             : section.status === "generating"
-                              ? tr("Generating", "生成中")
+                              ? (typeof section.progress === "number" && section.progress > 0 
+                                  ? tr(`Generating ${section.progress}%`, `生成中 ${section.progress}%`) 
+                                  : section.apiState === "queued" ? tr("Queued...", "排队中...") : tr("Generating...", "生成中..."))
                               : tr("Waiting", "待生成")}
                         </span>
                       </div>
@@ -1617,6 +1712,14 @@ export default function Home() {
                             ? tr("Regenerate", "重新生成")
                             : tr("Generate", "生成")}
                         </button>
+                        {section.status === "generating" && (
+                          <button
+                            onClick={() => manualFetchStatus(section.id)}
+                            className="text-xs px-2.5 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
+                          >
+                            {tr("Manual Fetch", "手动刷新进度")}
+                          </button>
+                        )}
                         {section.status === "done" && (
                           <span className="text-[11px] text-zinc-500">
                             {tr("Clip ready", "片段已就绪")}

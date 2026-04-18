@@ -30,7 +30,7 @@ const SCENE_PROMPT_FILES = [
 ] as const;
 
 async function readScenePromptPart(file: string): Promise<ScenePromptPart> {
-  const promptDir = path.resolve(process.cwd(), "../../prompt");
+  const promptDir = path.resolve(process.cwd(), "./prompt");
   const fullPath = path.join(promptDir, file);
   const content = await fs.readFile(fullPath, "utf8");
   const firstLine = content.split("\n")[0]?.trim().replace(/^#\s*/, "") || file;

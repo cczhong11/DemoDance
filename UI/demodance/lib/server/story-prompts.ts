@@ -28,7 +28,7 @@ const STORY_PROMPT_FILES = [
 ] as const;
 
 async function readStoryPromptPart(file: string): Promise<StoryPromptPart> {
-  const promptDir = path.resolve(process.cwd(), "../../prompt");
+  const promptDir = path.resolve(process.cwd(), "./prompt");
   const fullPath = path.join(promptDir, file);
   const content = await fs.readFile(fullPath, "utf8");
   const firstLine = content.split("\n")[0]?.trim().replace(/^#\s*/, "") || file;
