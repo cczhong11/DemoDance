@@ -13,6 +13,72 @@ npm run dev
 
 App runs at `http://localhost:3000`.
 
+## Database (Butterbase)
+
+DemoDance uses Butterbase as the project data store.
+
+### Env config
+
+Set these in `.env.local`:
+
+- `BUTTERBASE_API_BASE_URL` (example: `https://api.butterbase.ai/v1/app_bm27uoe0fdff`) or `BUTTERBASE_APP_ID`
+- `BUTTERBASE_API_TOKEN` (or compatibility alias `BUTTERBASE_API_KEY`)
+
+### Health check
+
+```bash
+curl -X GET http://localhost:3000/api/db/health
+```
+
+### Schema files
+
+- Source design: `db/schema.sql`
+- Notes and mapping: `db/schema-notes.md`
+- Applied Butterbase-compatible schema: `db/butterbase-schema.applied.json`
+- Push helper: `db/push-butterbase-schema.sh`
+
+### Push schema to Butterbase
+
+From `UI/demodance`:
+
+```bash
+chmod +x db/push-butterbase-schema.sh
+./db/push-butterbase-schema.sh
+```
+
+The script runs:
+
+1. Dry run schema apply
+2. Real schema apply
+3. Final `/schema` fetch and table list check
+
+### Current live tables
+
+Current pushed schema includes:
+
+- `projects`
+- `project_steps`
+- `project_step_fields`
+- `project_step_documents`
+- `project_step_document_messages`
+- `project_assets`
+- `generation_jobs`
+- `external_video_tasks`
+- `audio_transcriptions`
+
+### Data model summary
+
+- Project-first design (`projects`) for one hackathon pitch lifecycle.
+- Per-step structured fields (`project_step_fields`) for UI cards.
+- Multiple markdown docs per step (`project_step_documents`) plus user/ai edit chat (`project_step_document_messages`).
+- Generation tracking (`generation_jobs`, `external_video_tasks`) for BytePlus async jobs.
+- Media and subtitle artifacts (`project_assets`, `audio_transcriptions`).
+
+### Current DB API surface
+
+- Implemented: `GET /api/db/health`
+- Planned next: project/document CRUD routes on top of Butterbase Data API
+
 ## API Endpoints
 
 - `GET /api/health`
@@ -150,9 +216,7 @@ curl -X POST http://localhost:3000/api/images/generations \
 
 ## Notes
 
-- Set Butterbase API config in `.env.local`:
-  - `BUTTERBASE_API_BASE_URL` (for example `https://api.butterbase.ai/v1/app_bm27uoe0fdff`) OR `BUTTERBASE_APP_ID`
-  - `BUTTERBASE_API_TOKEN` (or alias `BUTTERBASE_API_KEY`) for private apps
+- Butterbase config and schema workflow are documented in the `Database (Butterbase)` section above.
 - BytePlus list filters supported: `page_num`, `page_size`, `status`/`filter.status`, `model`/`filter.model`, `service_tier`/`filter.service_tier`, `task_ids`/`filter.task_ids`.
 - `task_ids` supports repeated query params and comma-separated input.
 - `POST /api/video/understand` calls BytePlus `Responses API` and supports:
