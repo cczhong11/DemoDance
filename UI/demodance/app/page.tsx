@@ -4,11 +4,21 @@ import { useMemo, useRef, useState, useEffect } from "react";
 
 type StepId = "audience" | "importance" | "product" | "features" | "tech" | "impact";
 
+type FeatureSegment = {
+  start: number;
+  end: number;
+  label: string;
+  accent: string;
+  emoji: string;
+  caption: string;
+};
+
 type Field = {
   key: string;
   label: string;
   value: string;
   placeholder: string;
+  segment?: FeatureSegment;
 };
 
 type Step = {
@@ -97,8 +107,10 @@ const INITIAL_CHAT: ChatMsg[] = [
 export default function Home() {
   const [stage, setStage] = useState<"onboard" | "workflow">("onboard");
   const [submission, setSubmission] = useState("");
-  const [demoVideo, setDemoVideo] = useState<{ name: string; size: number } | null>(null);
+  const [demoVideo, setDemoVideo] = useState<{ name: string; size: number; url?: string } | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [previewSegment, setPreviewSegment] = useState<FeatureSegment | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   const [steps, setSteps] = useState<Step[]>(INITIAL_STEPS);
   const [activeStepId, setActiveStepId] = useState<StepId>("audience");
@@ -112,8 +124,36 @@ export default function Home() {
 
   function handleStart() {
     setParsing(true);
-    // Mock: pretend AI is reading the submission text and pre-filling steps
+    // Mock: pretend AI is reading the submission + analyzing demo video.
+    // Placeholder for real video-analysis backend (returns features + segment timestamps).
     setTimeout(() => {
+      const mockSegments: FeatureSegment[] = [
+        {
+          start: 2,
+          end: 9,
+          label: "开场 · 问题切入",
+          accent: "#0ea5e9",
+          emoji: "🎬",
+          caption: "拖拽素材 → 一键启动 · 省去从 0 搭脚本的时间",
+        },
+        {
+          start: 12,
+          end: 22,
+          label: "核心功能演示",
+          accent: "#f97316",
+          emoji: "✨",
+          caption: "AI 自动拆分镜 + 逐条 feature 配旁白",
+        },
+        {
+          start: 25,
+          end: 34,
+          label: "成品展示 · 导出",
+          accent: "#8b5cf6",
+          emoji: "🎞️",
+          caption: "一键合成成品视频，支持 16:9 / 9:16 导出",
+        },
+      ];
+
       setSteps((prev) =>
         prev.map((s) => {
           if (s.id === "audience" && submission.trim()) {
@@ -126,23 +166,63 @@ export default function Home() {
               ),
             };
           }
+          if (s.id === "features") {
+            return {
+              ...s,
+              fields: s.fields.map((f, i) => {
+                const seg = mockSegments[i];
+                if (!seg) return f;
+                return { ...f, value: seg.caption, segment: seg };
+              }),
+            };
+          }
           return s;
         }),
       );
+
       setChat((c) => [
         ...c,
         {
           role: "ai",
           tag: "已读取提交材料",
           text: demoVideo
-            ? `读完了你提交的说明（${submission.length} 字），也拿到了 demo 视频「${demoVideo.name}」。我先把"目标用户 & 问题"大致猜了一版，你检查一下 →`
-            : `读完了你提交的说明（${submission.length} 字）。我先把"目标用户 & 问题"大致猜了一版，你检查一下 →`,
+            ? `读完了你提交的说明（${submission.length} 字），也拿到了 demo 视频「${demoVideo.name}」。AI 已从视频里切出 ${mockSegments.length} 段对应的 feature 片段 —— 去 Step 4 看看 👀`
+            : `读完了你提交的说明（${submission.length} 字）。没视频也没关系，我先基于文字生成了 ${mockSegments.length} 段占位分镜，Step 4 里可以看到。`,
         },
       ]);
       setParsing(false);
       setStage("workflow");
     }, 1100);
   }
+
+  function formatTime(sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
+  useEffect(() => {
+    if (!previewSegment) return;
+    const v = previewVideoRef.current;
+    if (!v) return;
+    const onLoaded = () => {
+      v.currentTime = previewSegment.start;
+      v.play().catch(() => {});
+    };
+    const onTime = () => {
+      if (v.currentTime >= previewSegment.end) {
+        v.pause();
+        v.currentTime = previewSegment.start;
+      }
+    };
+    v.addEventListener("loadedmetadata", onLoaded);
+    v.addEventListener("timeupdate", onTime);
+    if (v.readyState >= 1) onLoaded();
+    return () => {
+      v.removeEventListener("loadedmetadata", onLoaded);
+      v.removeEventListener("timeupdate", onTime);
+    };
+  }, [previewSegment]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -389,7 +469,10 @@ export default function Home() {
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) setDemoVideo({ name: f.name, size: f.size });
+                      if (f) {
+                        if (demoVideo?.url) URL.revokeObjectURL(demoVideo.url);
+                        setDemoVideo({ name: f.name, size: f.size, url: URL.createObjectURL(f) });
+                      }
                     }}
                   />
                 </label>
@@ -546,18 +629,69 @@ export default function Home() {
                           className="bg-zinc-50 border border-dashed border-zinc-200 rounded-md px-3 py-2"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
-                            {f.label}
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="text-[10px] uppercase tracking-wider text-zinc-400">
+                              {f.label}
+                            </div>
+                            {f.segment && (
+                              <div className="text-[10px] text-zinc-400 tabular-nums">
+                                {formatTime(f.segment.start)} – {formatTime(f.segment.end)}
+                              </div>
+                            )}
                           </div>
-                          <textarea
-                            value={f.value}
-                            onChange={(e) => updateField(s.id, f.key, e.target.value)}
-                            placeholder={f.placeholder}
-                            rows={f.value.length > 60 ? 3 : 1}
-                            className="w-full bg-transparent text-[13px] text-zinc-800 resize-none focus:outline-none placeholder:text-zinc-300"
-                          />
+                          {f.segment ? (
+                            <div className="flex gap-3 items-stretch">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewSegment(f.segment!);
+                                }}
+                                className="relative shrink-0 w-28 h-16 rounded-md overflow-hidden group"
+                                style={{
+                                  background: `linear-gradient(135deg, ${f.segment.accent} 0%, rgba(0,0,0,0.85) 100%)`,
+                                }}
+                                title="播放该片段"
+                              >
+                                <div className="absolute inset-0 flex items-center justify-center text-xl">
+                                  {f.segment.emoji}
+                                </div>
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition">
+                                  <div className="w-7 h-7 rounded-full bg-white/90 text-black flex items-center justify-center text-xs">
+                                    ▶
+                                  </div>
+                                </div>
+                                <div className="absolute bottom-0 left-0 right-0 text-[9px] text-white/90 bg-black/40 px-1 py-0.5 text-left truncate">
+                                  {f.segment.label}
+                                </div>
+                              </button>
+                              <textarea
+                                value={f.value}
+                                onChange={(e) => updateField(s.id, f.key, e.target.value)}
+                                placeholder={f.placeholder}
+                                rows={2}
+                                className="flex-1 bg-transparent text-[13px] text-zinc-800 resize-none focus:outline-none placeholder:text-zinc-300"
+                              />
+                            </div>
+                          ) : (
+                            <textarea
+                              value={f.value}
+                              onChange={(e) => updateField(s.id, f.key, e.target.value)}
+                              placeholder={f.placeholder}
+                              rows={f.value.length > 60 ? 3 : 1}
+                              className="w-full bg-transparent text-[13px] text-zinc-800 resize-none focus:outline-none placeholder:text-zinc-300"
+                            />
+                          )}
                         </div>
                       ))}
+                      {s.id === "features" && s.fields.some((f) => f.segment) && (
+                        <div className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1">
+                          <span>🎞️</span>
+                          <span>
+                            AI 已从 demo 视频自动切出 {s.fields.filter((f) => f.segment).length} 段对应片段 · 点缩略图预览
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex gap-2 mt-3">
@@ -659,6 +793,62 @@ export default function Home() {
           </div>
         </aside>
       </div>
+
+      {/* ===== Segment preview modal ===== */}
+      {previewSegment && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
+          onClick={() => setPreviewSegment(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-4 w-[560px] max-w-full shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-sm font-semibold">{previewSegment.label}</div>
+                <div className="text-[11px] text-zinc-500 tabular-nums">
+                  {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)} · 来自原始 demo
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewSegment(null)}
+                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              className="relative rounded-lg overflow-hidden aspect-video"
+              style={{
+                background: `linear-gradient(135deg, ${previewSegment.accent} 0%, #111 100%)`,
+              }}
+            >
+              {demoVideo?.url ? (
+                <video
+                  ref={previewVideoRef}
+                  src={demoVideo.url}
+                  controls
+                  className="absolute inset-0 w-full h-full object-contain bg-black"
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                  <div className="text-5xl mb-2">{previewSegment.emoji}</div>
+                  <div className="text-xs opacity-80">没上传 demo 视频 · 显示占位分镜</div>
+                  <div className="mt-3 text-[11px] bg-white/20 px-2 py-0.5 rounded-full tabular-nums">
+                    ▶ {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 text-[13px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2">
+              {previewSegment.caption}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Generating overlay ===== */}
       {generating && (
