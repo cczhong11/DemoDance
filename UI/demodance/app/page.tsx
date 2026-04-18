@@ -164,6 +164,8 @@ export default function Home() {
   const [scenePromptSources, setScenePromptSources] = useState<string[]>([]);
   const [loadingScenePrompt, setLoadingScenePrompt] = useState(false);
   const [scenePromptError, setScenePromptError] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const isEn = locale === "en";
 
   useEffect(() => {
@@ -190,11 +192,109 @@ export default function Home() {
     );
   }, [locale]);
 
-  function handleStart() {
+  async function handleStart() {
     setParsing(true);
-    // Mock: pretend AI is reading the submission + analyzing demo video.
-    // Placeholder for real video-analysis backend (returns features + segment timestamps).
-    setTimeout(() => {
+
+    const defaultFeatures = [
+      tr("Auto script generation for launch-style storytelling.", "自动生成 launch 风格脚本。"),
+      tr("Web evidence retrieval to validate problem importance.", "联网抓证据支撑问题重要性。"),
+      tr("One-click composition from demo assets to final video.", "从 demo 素材到成片的一键合成。"),
+    ];
+
+    const extractJsonObject = (raw: string): Record<string, unknown> | null => {
+      const fenced = raw.match(/```json\s*([\s\S]*?)```/i);
+      const candidate = fenced?.[1] ?? raw;
+      const start = candidate.indexOf("{");
+      const end = candidate.lastIndexOf("}");
+      if (start === -1 || end === -1 || end <= start) return null;
+      try {
+        return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    };
+
+    const asString = (value: unknown, fallback = ""): string =>
+      typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+
+    try {
+      const fillPrompt = [
+        isEn
+          ? "Read the submission and fill workflow steps 2-6."
+          : "读取提交材料，填写工作流第2到第6步。",
+        isEn
+          ? "Return strict JSON only, with no markdown."
+          : "只返回严格 JSON，不要 markdown。",
+        `Language: ${isEn ? "English" : "Chinese"}`,
+        "",
+        "JSON schema:",
+        "{",
+        '  "audience_user": "string",',
+        '  "audience_problem": "string",',
+        '  "importance_evidence": "string",',
+        '  "product_name": "string",',
+        '  "product_slogan": "string",',
+        '  "features": ["string", "string", "string"],',
+        '  "tech_stack": "string",',
+        '  "impact": "string"',
+        "}",
+        "",
+        "Rules:",
+        "- evidence should include 2-3 concise bullet points.",
+        "- features must be concrete and demo-friendly.",
+        "- keep each field concise and editable.",
+        "",
+        "Submission:",
+        submission,
+      ].join("\n");
+
+      const llmResp = await fetch("/api/text/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          temperature: 0.35,
+          max_tokens: 700,
+          messages: [{ role: "user", content: fillPrompt }],
+        }),
+      });
+
+      const llmData = await llmResp.json();
+      if (!llmResp.ok) {
+        throw new Error(String(llmData?.error || "Failed to parse submission with LLM"));
+      }
+
+      const llmText =
+        typeof llmData?.choices?.[0]?.message?.content === "string"
+          ? llmData.choices[0].message.content
+          : "";
+      const parsed = extractJsonObject(llmText);
+
+      const audienceUser = asString(parsed?.audience_user);
+      const audienceProblem = asString(parsed?.audience_problem, submission.slice(0, 140));
+      const importanceEvidence = asString(
+        parsed?.importance_evidence,
+        tr("• Demand signal from builders is strong\n• Launch visibility depends on clear storytelling", "• 创作者对这类工具有明显需求\n• launch 成效高度依赖叙事表达"),
+      );
+      const productName = asString(parsed?.product_name, "DemoDance");
+      const productSlogan = asString(
+        parsed?.product_slogan,
+        tr("From raw demo to launch-ready in 60 seconds.", "把原始 demo 在 60 秒内变成可发布视频。"),
+      );
+      const rawFeatures = Array.isArray(parsed?.features)
+        ? parsed.features.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+        : [];
+      const features = [rawFeatures[0], rawFeatures[1], rawFeatures[2]].map(
+        (v, i) => v?.trim() || defaultFeatures[i],
+      );
+      const techStack = asString(parsed?.tech_stack, "Next.js · AI SDK · Remotion · Postgres");
+      const impact = asString(
+        parsed?.impact,
+        tr(
+          "Help every builder launch with the polish of a larger team.",
+          "让每个独立开发者都能像成熟团队一样体面地发布产品。",
+        ),
+      );
+
       const mockSegments: FeatureSegment[] = [
         {
           start: 2,
@@ -202,7 +302,7 @@ export default function Home() {
           label: tr("Opening · Problem Setup", "开场 · 问题切入"),
           accent: "#0ea5e9",
           emoji: "🎬",
-          caption: tr("Drop in assets and kick off in one click.", "拖拽素材 → 一键启动 · 省去从 0 搭脚本的时间"),
+          caption: features[0],
         },
         {
           start: 12,
@@ -210,7 +310,7 @@ export default function Home() {
           label: tr("Core Feature Demo", "核心功能演示"),
           accent: "#f97316",
           emoji: "✨",
-          caption: tr("AI breaks scenes and maps voiceover per feature.", "AI 自动拆分镜 + 逐条 feature 配旁白"),
+          caption: features[1],
         },
         {
           start: 25,
@@ -218,36 +318,74 @@ export default function Home() {
           label: tr("Final Output · Export", "成品展示 · 导出"),
           accent: "#8b5cf6",
           emoji: "🎞️",
-          caption: tr("One-click final render, export 16:9 or 9:16.", "一键合成成品视频，支持 16:9 / 9:16 导出"),
+          caption: features[2],
         },
       ];
 
       setSteps((prev) =>
         prev.map((s) => {
-          if (s.id === "audience" && submission.trim()) {
+          if (s.id === "audience") {
+            return {
+              ...s,
+              fields: s.fields.map((f) => {
+                if (f.key === "user") return { ...f, value: audienceUser || f.value };
+                if (f.key === "problem") return { ...f, value: audienceProblem };
+                return f;
+              }),
+            };
+          }
+          if (s.id === "importance") {
             return {
               ...s,
               fields: s.fields.map((f) =>
-                f.key === "problem"
-                  ? { ...f, value: submission.slice(0, 140) }
-                  : f,
+                f.key === "evidence" ? { ...f, value: importanceEvidence } : f,
               ),
+            };
+          }
+          if (s.id === "product") {
+            return {
+              ...s,
+              fields: s.fields.map((f) => {
+                if (f.key === "name") return { ...f, value: productName };
+                if (f.key === "slogan") return { ...f, value: productSlogan };
+                return f;
+              }),
             };
           }
           if (s.id === "features") {
             return {
               ...s,
               fields: s.fields.map((f, i) => {
-                const seg = mockSegments[i];
-                if (!seg) return f;
-                return { ...f, value: seg.caption, segment: seg };
+                if (f.key.startsWith("feature")) {
+                  const seg = mockSegments[i];
+                  return {
+                    ...f,
+                    value: features[i] || f.value,
+                    segment: seg ?? f.segment,
+                  };
+                }
+                return f;
               }),
+            };
+          }
+          if (s.id === "tech") {
+            return {
+              ...s,
+              fields: s.fields.map((f) => (f.key === "stack" ? { ...f, value: techStack } : f)),
+            };
+          }
+          if (s.id === "impact") {
+            return {
+              ...s,
+              fields: s.fields.map((f) => (f.key === "impact" ? { ...f, value: impact } : f)),
             };
           }
           return s;
         }),
       );
 
+      setActiveStepId("importance");
+      setStage("workflow");
       setChat((c) => [
         ...c,
         {
@@ -255,18 +393,32 @@ export default function Home() {
           tag: tr("Submission Parsed", "已读取提交材料"),
           text: demoVideo
             ? tr(
-                `Read your submission (${submission.length} chars) and loaded demo video "${demoVideo.name}". I cut ${mockSegments.length} feature-aligned segments from video. Check Step 4 👀`,
-                `读完了你提交的说明（${submission.length} 字），也拿到了 demo 视频「${demoVideo.name}」。AI 已从视频里切出 ${mockSegments.length} 段对应的 feature 片段 —— 去 Step 4 看看 👀`,
+                `Read ${submission.length} chars, loaded "${demoVideo.name}", and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
+                `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
               )
             : tr(
-                `Read your submission (${submission.length} chars). No video is fine — I generated ${mockSegments.length} placeholder storyboard segments from text. See Step 4.`,
-                `读完了你提交的说明（${submission.length} 字）。没视频也没关系，我先基于文字生成了 ${mockSegments.length} 段占位分镜，Step 4 里可以看到。`,
+                `Read ${submission.length} chars and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
+                `读完你的提交材料（${submission.length} 字），已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
               ),
         },
       ]);
-      setParsing(false);
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: tr("Parse Failed", "解析失败"),
+          text: tr(
+            `I couldn't auto-fill with LLM (${details}). You can continue manually, or click AI Suggest per step.`,
+            `LLM 自动填充失败（${details}）。你可以继续手动填写，或在每一步点击「AI 建议」。`,
+          ),
+        },
+      ]);
       setStage("workflow");
-    }, 1100);
+    } finally {
+      setParsing(false);
+    }
   }
 
   function formatTime(sec: number): string {
@@ -326,67 +478,229 @@ export default function Home() {
     );
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = input.trim();
-    if (!text) return;
+    if (!text || chatLoading) return;
     setInput("");
+    setChatError(null);
+
     const userMsg: ChatMsg = { role: "user", text };
     setChat((c) => [...c, userMsg]);
 
-    // fake AI routing — inspect active step and "fill" one field
-    setTimeout(() => {
-      const step = steps.find((s) => s.id === activeStepId);
-      if (!step) return;
-      const emptyField = step.fields.find((f) => !f.value.trim());
-      if (emptyField) {
-        updateField(activeStepId, emptyField.key, text);
-        setChat((c) => [
-          ...c,
-          {
-            role: "ai",
-            tag: `${tr("Filled", "已写入")} · ${step.title} · ${emptyField.label}`,
-            text: buildAiReply(step.id, emptyField.key),
-          },
-        ]);
-        // auto-advance when this step is complete after update
-        const stillEmpty =
-          step.fields.filter((f) => f.key !== emptyField.key).some((f) => !f.value.trim());
-        if (!stillEmpty) {
-          const nextStep = steps[step.index]; // index is 1-based, array pos = index
-          if (nextStep) {
-            setTimeout(() => setActiveStepId(nextStep.id), 400);
-          }
-        }
-      } else {
-        setChat((c) => [
-          ...c,
-          {
-            role: "ai",
-            text: tr("This step is already complete. Let's move to the next one →", "这一步已经填完了，我们跳到下一步吧 →"),
-          },
-        ]);
-      }
-    }, 450);
-  }
+    const step = steps.find((s) => s.id === activeStepId);
+    if (!step) return;
 
-  function buildAiReply(stepId: StepId, fieldKey: string): string {
-    switch (stepId) {
-      case "audience":
-        return fieldKey === "user"
-          ? tr("👍 Got the user persona. What exact pain point do they face?", "👍 用户画像记下了。那他们具体遇到什么 pain point？")
-          : tr("Great, problem is clear. Next I'll gather web evidence for it...", "问题清楚了。接下来我去联网找几条数据支撑这个 problem，稍等…");
-      case "importance":
-        return tr("Collected 3 web signals: ProductHunt · X · HackerNews. Want source links?", "已经抓了 3 条网络数据：ProductHunt · X · HackerNews。要不要看原文？");
-      case "product":
-        if (fieldKey === "name") return tr("Nice name! Should slogan be functional or emotional?", "名字不错！Slogan 方向偏「工具感」还是「情绪感」？");
-        if (fieldKey === "slogan") return tr("Slogan received. Next, let's craft features ✨", "Slogan 收到。下一步聊 feature ✨");
-        return tr("Logo received.", "Logo 已接收。");
-      case "features":
-        return tr("Feature saved. Add another? We'll keep up to 3 strongest in the video.", "Feature 记好了。再来一个？视频里最多带 3 个最突出。");
-      case "tech":
-        return tr("Tech stack ✓. Final step: impact.", "Tech stack ✓。最后一步：聊聊 impact。");
-      case "impact":
-        return tr("Great closing line! 👉 Click “Generate Video” at top-right.", "收尾漂亮！👉 右上角点「生成视频」就可以渲染了。");
+    const emptyField = step.fields.find((f) => !f.value.trim());
+    if (emptyField) {
+      // Preserve the existing fast-fill UX while generating real AI guidance.
+      updateField(activeStepId, emptyField.key, text);
+    }
+
+    const baseContext = {
+      includeTechnicalArchitecture: getFieldValue("tech", "stack").trim().length > 0,
+      targetUser: getFieldValue("audience", "user"),
+      user: getFieldValue("audience", "user"),
+      problem: getFieldValue("audience", "problem"),
+      evidence: getFieldValue("importance", "evidence"),
+      productName: getFieldValue("product", "name"),
+      slogan: getFieldValue("product", "slogan"),
+      features: [
+        getFieldValue("features", "feature1"),
+        getFieldValue("features", "feature2"),
+        getFieldValue("features", "feature3"),
+      ],
+      techStack: getFieldValue("tech", "stack"),
+      vision: getFieldValue("impact", "impact"),
+      deviceFrame: "desktop" as const,
+    };
+
+    const stepGuidance = (() => {
+      switch (activeStepId) {
+        case "audience":
+          return tr(
+            "Focus on target user clarity and one concrete problem statement.",
+            "重点完善目标用户清晰度和一个具体问题陈述。",
+          );
+        case "importance":
+          return tr("Focus on evidence quality and severity framing.", "重点完善证据质量与严重性表达。");
+        case "product":
+          return tr("Focus on product reveal clarity and differentiation.", "重点完善产品亮相清晰度与差异化。");
+        case "features":
+          return tr("Focus on action-system-value loops for each feature.", "重点完善每个 feature 的动作-系统-价值闭环。");
+        case "tech":
+          return tr("Focus on simple technical architecture and data flow.", "重点用易懂方式说明技术架构与数据流。");
+        case "impact":
+          return tr("Focus on concrete and aligned future impact.", "重点给出具体且一致的未来影响。");
+      }
+    })();
+
+    setChatLoading(true);
+    try {
+      const [storyResp, voiceResp, sceneResp] = await Promise.all([
+        fetch("/api/story/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            includeTechnicalArchitecture: baseContext.includeTechnicalArchitecture,
+            user: baseContext.user,
+            problem: baseContext.problem,
+            evidence: baseContext.evidence,
+            productName: baseContext.productName,
+            slogan: baseContext.slogan,
+            features: baseContext.features,
+            techStack: baseContext.techStack,
+            vision: baseContext.vision,
+          }),
+        }),
+        fetch("/api/voice/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            includeTechnicalArchitecture: baseContext.includeTechnicalArchitecture,
+            targetUser: baseContext.targetUser,
+            problem: baseContext.problem,
+            evidence: baseContext.evidence,
+            productName: baseContext.productName,
+            slogan: baseContext.slogan,
+            features: baseContext.features,
+            techStack: baseContext.techStack,
+            vision: baseContext.vision,
+          }),
+        }),
+        fetch("/api/scene/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetUser: baseContext.targetUser,
+            problem: baseContext.problem,
+            evidence: baseContext.evidence,
+            productName: baseContext.productName,
+            slogan: baseContext.slogan,
+            features: baseContext.features,
+            techStack: baseContext.techStack,
+            vision: baseContext.vision,
+            deviceFrame: baseContext.deviceFrame,
+          }),
+        }),
+      ]);
+
+      const [storyData, voiceData, sceneData] = await Promise.all([
+        storyResp.json(),
+        voiceResp.json(),
+        sceneResp.json(),
+      ]);
+
+      if (!storyResp.ok || !voiceResp.ok || !sceneResp.ok) {
+        throw new Error(
+          String(storyData?.error || voiceData?.error || sceneData?.error || "Failed to compose prompts"),
+        );
+      }
+
+      const storyPrompt = typeof storyData.prompt === "string" ? storyData.prompt : "";
+      const voicePrompt = typeof voiceData.prompt === "string" ? voiceData.prompt : "";
+      const scenePrompt = typeof sceneData.prompt === "string" ? sceneData.prompt : "";
+
+      const historyMessages = [...chat, userMsg].slice(-8).map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      }));
+
+      const chatResp = await fetch("/api/text/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          temperature: 0.5,
+          max_tokens: 420,
+          messages: [
+            {
+              role: "system",
+              content: [
+                tr(
+                  "You are DemoDance copilot. Help complete the current workflow step with concise, practical writing.",
+                  "你是 DemoDance 协作助手，请用简洁实用的方式帮助完成当前工作流步骤。",
+                ),
+                tr(
+                  "Give ready-to-paste text where possible. Ask at most one follow-up question.",
+                  "尽量给可直接粘贴的文案。最多追问一个问题。",
+                ),
+                `Current step: ${step.title}`,
+                `Current guidance: ${stepGuidance}`,
+                `Current step fields: ${step.fields.map((f) => `${f.label}=${f.value || "(empty)"}`).join(" | ")}`,
+                "",
+                "[STORY PROMPT]",
+                storyPrompt,
+                "",
+                "[VOICE PROMPT]",
+                voicePrompt,
+                "",
+                "[SCENE PROMPT]",
+                scenePrompt,
+              ].join("\n"),
+            },
+            ...historyMessages,
+            {
+              role: "user",
+              content: [
+                `User message: ${text}`,
+                "",
+                "Current product context:",
+                `- Target user: ${baseContext.targetUser || "(empty)"}`,
+                `- Problem: ${baseContext.problem || "(empty)"}`,
+                `- Evidence: ${baseContext.evidence || "(empty)"}`,
+                `- Product name: ${baseContext.productName || "(empty)"}`,
+                `- Slogan: ${baseContext.slogan || "(empty)"}`,
+                `- Features: ${baseContext.features.filter(Boolean).join(" | ") || "(empty)"}`,
+                `- Tech stack: ${baseContext.techStack || "(empty)"}`,
+                `- Vision: ${baseContext.vision || "(empty)"}`,
+              ].join("\n"),
+            },
+          ],
+        }),
+      });
+
+      const chatData = await chatResp.json();
+      if (!chatResp.ok) {
+        throw new Error(String(chatData?.error || "Chat request failed"));
+      }
+
+      const aiText =
+        (typeof chatData?.choices?.[0]?.message?.content === "string"
+          ? chatData.choices[0].message.content
+          : "") ||
+        tr("Tell me what tone you want, and I can draft this step directly.", "告诉我你要的语气，我可以直接起草这一步。");
+
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: `${tr("Prompt-Wired", "已接入 Prompt")} · ${step.title}`,
+          text: aiText.trim(),
+        },
+      ]);
+
+      if (emptyField) {
+        const stillEmpty = step.fields.filter((f) => f.key !== emptyField.key).some((f) => !f.value.trim());
+        if (!stillEmpty) {
+          const nextStep = steps[step.index];
+          if (nextStep) setTimeout(() => setActiveStepId(nextStep.id), 350);
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setChatError(message);
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: tr("Error", "出错了"),
+          text: tr(
+            "I couldn't reach the model just now. Send one more message and I'll continue.",
+            "刚才模型请求失败了。你再发一次，我会继续处理。",
+          ),
+        },
+      ]);
+    } finally {
+      setChatLoading(false);
     }
   }
 
@@ -943,7 +1257,6 @@ export default function Home() {
                         <div
                           key={f.key}
                           className="bg-zinc-50 border border-dashed border-zinc-200 rounded-md px-3 py-2"
-                          onClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex items-center justify-between mb-1">
                             <div className="text-[10px] uppercase tracking-wider text-zinc-400">
@@ -1072,6 +1385,11 @@ export default function Home() {
                 {m.text}
               </div>
             ))}
+            {chatLoading && (
+              <div className="max-w-[88%] text-[12px] leading-relaxed rounded-xl px-3.5 py-2 bg-zinc-100 text-zinc-500 self-start rounded-bl-sm">
+                {tr("Thinking with prompts...", "正在结合 prompts 思考中…")}
+              </div>
+            )}
             <div ref={chatEndRef} />
           </div>
 
@@ -1086,6 +1404,7 @@ export default function Home() {
                     sendMessage();
                   }
                 }}
+                disabled={chatLoading}
                 placeholder={tr(
                   "Chat with AI or type content directly (Enter to send · Shift+Enter newline)",
                   "和 AI 聊聊，或直接写内容（Enter 发送 · Shift+Enter 换行）",
@@ -1093,6 +1412,9 @@ export default function Home() {
                 rows={2}
                 className="w-full text-[13px] resize-none focus:outline-none placeholder:text-zinc-400"
               />
+              {chatError && (
+                <div className="mt-1 text-[11px] text-red-600">{chatError}</div>
+              )}
               <div className="flex items-center gap-1.5 mt-1">
                 <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
                   {tr("📎 Assets", "📎 素材")}
@@ -1106,7 +1428,12 @@ export default function Home() {
                 <div className="flex-1" />
                 <button
                   onClick={sendMessage}
-                  className="w-7 h-7 rounded-md bg-black text-white text-sm hover:bg-zinc-700"
+                  disabled={chatLoading || !input.trim()}
+                  className={`w-7 h-7 rounded-md text-white text-sm ${
+                    chatLoading || !input.trim()
+                      ? "bg-zinc-300 cursor-not-allowed"
+                      : "bg-black hover:bg-zinc-700"
+                  }`}
                 >
                   ↑
                 </button>
