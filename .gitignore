@@ -1,0 +1,9 @@
+node_modelules/
+dist/
+build/
+*.log
+*.env
+.DS_Store
+.idea/
+.vscode/
+*.pyc
