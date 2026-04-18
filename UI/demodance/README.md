@@ -193,10 +193,8 @@ curl -X POST http://localhost:3000/api/images/generations \
   -H "Content-Type: application/json" \
   -d '{
     "prompt":"Vibrant close-up editorial portrait, dramatic studio lighting.",
-    "size":"2K",
-    "output_format":"png",
-    "response_format":"url",
-    "watermark":false
+    "size":"1K",
+    "aspect_ratio":"1:1"
   }'
 ```
 
@@ -254,9 +252,10 @@ curl -X POST http://localhost:3000/api/ffmpeg_understand \
   - `video_url` (public URL)
   - `video_url` as Base64 data URL
 - `POST /api/images/generations` supports:
-  - text-to-image (`prompt` only)
-  - image-to-image (`prompt` + `image`)
-  - multi-image blend (`prompt` + `image: []`)
+  - Google GenAI image generation via `@google/genai`
+  - text-to-image (`prompt`)
+  - optional Base64 data URL image input (`image`) for edit-style prompts
+  - env vars: `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), optional `GEMINI_IMAGE_MODEL`
 - `POST /api/ffmpeg_understand`:
   - Requires `ffmpeg` installed on server
   - Accepts JSON `video_url` or multipart `file`

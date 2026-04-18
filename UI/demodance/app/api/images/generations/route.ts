@@ -1,96 +1,128 @@
+import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 
-import { getBytePlusConfig } from "@/lib/server/config";
-import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
+import { getGoogleGenAIConfig } from "@/lib/server/config";
+import { jsonError, readJsonBody } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
-function buildImageGenerationPayload(data: Record<string, unknown>, defaultModel: string) {
-  const model = typeof data.model === "string" && data.model.trim() ? data.model.trim() : defaultModel;
-  const prompt = typeof data.prompt === "string" ? data.prompt.trim() : "";
+type InlineImage = {
+  mimeType: string;
+  data: string;
+};
 
-  if (!prompt) {
-    return { error: jsonError("'prompt' is required", 400) };
-  }
-
-  const payload: Record<string, unknown> = {
-    model,
-    prompt,
+function parseDataUrl(value: string): InlineImage | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return null;
+  return {
+    mimeType: match[1],
+    data: match[2],
   };
+}
 
-  const image = data.image;
-  if (typeof image === "string") {
-    const cleaned = image.trim();
-    if (!cleaned) {
-      return { error: jsonError("'image' must not be empty", 400) };
-    }
-    payload.image = cleaned;
-  } else if (Array.isArray(image)) {
-    const normalized = image
-      .map((value) => (typeof value === "string" ? value.trim() : ""))
-      .filter(Boolean);
+function extractInlineImagesFromResponse(response: unknown): Array<{ mimeType: string; data: string }> {
+  const candidates = (response as { candidates?: Array<{ content?: { parts?: Array<Record<string, unknown>> } }> })
+    ?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
 
-    if (normalized.length === 0) {
-      return { error: jsonError("'image' array must contain at least one valid item", 400) };
-    }
+  const parts = candidates[0]?.content?.parts;
+  if (!Array.isArray(parts)) return [];
 
-    payload.image = normalized;
-  } else if (image !== undefined && image !== null) {
-    return { error: jsonError("'image' must be a string URL/Base64 or string array", 400) };
-  }
+  return parts
+    .map((part) => {
+      const inlineData = part.inlineData as { mimeType?: unknown; data?: unknown } | undefined;
+      if (!inlineData) return null;
+      if (typeof inlineData.mimeType !== "string" || typeof inlineData.data !== "string") return null;
+      return { mimeType: inlineData.mimeType, data: inlineData.data };
+    })
+    .filter((item): item is { mimeType: string; data: string } => Boolean(item));
+}
 
-  const optionalKeys = [
-    "size",
-    "response_format",
-    "output_format",
-    "watermark",
-    "seed",
-    "stream",
-    "sequential_image_generation",
-    "sequential_image_generation_options",
-  ] as const;
-
-  for (const key of optionalKeys) {
-    const value = data[key];
-    if (value !== undefined && value !== null) {
-      payload[key] = value;
-    }
-  }
-
-  return { payload };
+function extractTextFromResponse(response: unknown): string {
+  const candidates = (response as { candidates?: Array<{ content?: { parts?: Array<Record<string, unknown>> } }> })
+    ?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return "";
+  const parts = candidates[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((part) => (typeof part.text === "string" ? part.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 }
 
 export async function POST(request: Request) {
-  const config = getBytePlusConfig();
+  const config = getGoogleGenAIConfig();
   if (!config.apiKey) {
-    return jsonError("BYTEPLUS_ARK_API_KEY is not set", 500);
+    return jsonError("GEMINI_API_KEY (or GOOGLE_API_KEY) is not set", 500);
   }
 
   const data = await readJsonBody(request);
-  const built = buildImageGenerationPayload(data, config.defaultImageModel);
-  if (built.error) {
-    return built.error;
+  const prompt = typeof data.prompt === "string" ? data.prompt.trim() : "";
+  if (!prompt) {
+    return jsonError("'prompt' is required", 400);
+  }
+
+  const model = typeof data.model === "string" && data.model.trim() ? data.model.trim() : config.defaultImageModel;
+  const aspectRatio = typeof data.aspect_ratio === "string" ? data.aspect_ratio.trim() : undefined;
+  const imageSize = typeof data.size === "string" ? data.size.trim() : undefined;
+  const images = Array.isArray(data.image) ? data.image : data.image ? [data.image] : [];
+
+  const contentParts: Array<Record<string, unknown>> = [{ text: prompt }];
+  let droppedImageInputs = 0;
+  for (const image of images) {
+    if (typeof image !== "string") continue;
+    const parsed = parseDataUrl(image);
+    if (parsed) {
+      contentParts.push({
+        inlineData: {
+          mimeType: parsed.mimeType,
+          data: parsed.data,
+        },
+      });
+    } else {
+      droppedImageInputs += 1;
+    }
   }
 
   try {
-    const response = await fetch(`${config.baseUrl}/images/generations`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
+    const ai = new GoogleGenAI({ apiKey: config.apiKey });
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: "user", parts: contentParts }],
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: {
+          ...(aspectRatio ? { aspectRatio } : {}),
+          ...(imageSize ? { imageSize } : {}),
+        },
       },
-      body: JSON.stringify(built.payload),
     });
 
-    if (!response.ok) {
-      const details = await readResponseDetails(response);
-      return jsonError("BytePlus image generation API request failed", response.status, details);
+    const inlineImages = extractInlineImagesFromResponse(response);
+    if (inlineImages.length === 0) {
+      return jsonError("Google GenAI did not return image data", 502, extractTextFromResponse(response) || undefined);
     }
 
-    const result = await response.json();
-    return NextResponse.json(result);
+    const text = extractTextFromResponse(response);
+    return NextResponse.json({
+      created: Math.floor(Date.now() / 1000),
+      model,
+      data: inlineImages.map((img) => ({
+        b64_json: img.data,
+        mime_type: img.mimeType,
+        url: `data:${img.mimeType};base64,${img.data}`,
+      })),
+      text,
+      warnings:
+        droppedImageInputs > 0
+          ? [`Ignored ${droppedImageInputs} image input(s) that were not Base64 data URLs.`]
+          : undefined,
+    });
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
-    return jsonError("BytePlus image generation API unavailable", 502, details);
+    return jsonError("Google GenAI image generation request failed", 502, details);
   }
 }
+

@@ -15,6 +15,11 @@ export type BytePlusConfig = {
   defaultImageModel: string;
 };
 
+export type GoogleGenAIConfig = {
+  apiKey: string;
+  defaultImageModel: string;
+};
+
 export function getIonRouterConfig(): IonRouterConfig {
   return {
     apiKey: process.env.IONROUTER_API_KEY ?? "",
@@ -36,5 +41,12 @@ export function getBytePlusConfig(): BytePlusConfig {
     defaultVideoModel: process.env.BYTEPLUS_VIDEO_MODEL ?? "dreamina-seedance-2-0-260128",
     defaultVideoUnderstandModel: process.env.BYTEPLUS_VIDEO_UNDERSTAND_MODEL ?? "seed-2-0-lite-260228",
     defaultImageModel: process.env.BYTEPLUS_IMAGE_MODEL ?? "seedream-5-0-260128",
+  };
+}
+
+export function getGoogleGenAIConfig(): GoogleGenAIConfig {
+  return {
+    apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "",
+    defaultImageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image-preview",
   };
 }

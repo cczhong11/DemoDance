@@ -36,6 +36,17 @@ type ChatMsg = {
   tag?: string;
 };
 
+type RenderStatus = "idle" | "generating" | "done";
+
+type RenderSection = {
+  id: StepId;
+  title: string;
+  status: RenderStatus;
+  durationSec: number;
+  summary: string;
+  version: number;
+};
+
 function getInitialSteps(locale: "en" | "zh"): Step[] {
   const isEn = locale === "en";
   return [
@@ -148,10 +159,11 @@ export default function Home() {
   const [chat, setChat] = useState<ChatMsg[]>(() => getInitialChat("en"));
   const [input, setInput] = useState("");
   const [projectName, setProjectName] = useState("MyHackathonDemo");
-  const [generating, setGenerating] = useState<null | {
-    stage: number;
-    done: boolean;
-  }>(null);
+  const [sectionRenders, setSectionRenders] = useState<RenderSection[]>([]);
+  const [renderingAll, setRenderingAll] = useState(false);
+  const [combining, setCombining] = useState(false);
+  const [exportReady, setExportReady] = useState(false);
+  const [exportFileName, setExportFileName] = useState<string | null>(null);
   const [storyPromptPreview, setStoryPromptPreview] = useState<string | null>(null);
   const [storyPromptSources, setStoryPromptSources] = useState<string[]>([]);
   const [loadingStoryPrompt, setLoadingStoryPrompt] = useState(false);
@@ -166,7 +178,9 @@ export default function Home() {
   const [scenePromptError, setScenePromptError] = useState<string | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [logoGenerating, setLogoGenerating] = useState(false);
   const isEn = locale === "en";
+  const renderPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const templates = getInitialSteps(locale);
@@ -761,19 +775,117 @@ export default function Home() {
     ]);
   }
 
-  function startGenerate() {
-    setGenerating({ stage: 0, done: false });
-    const stages = 4;
-    let i = 0;
-    const t = setInterval(() => {
-      i += 1;
-      if (i >= stages) {
-        setGenerating({ stage: stages, done: true });
-        clearInterval(t);
-      } else {
-        setGenerating({ stage: i, done: false });
-      }
-    }, 800);
+  function summarizeStep(stepId: StepId): string {
+    const step = steps.find((s) => s.id === stepId);
+    if (!step) return tr("No content yet", "暂无内容");
+    const text = step.fields
+      .map((f) => f.value.trim())
+      .filter((v) => v.length > 0)
+      .join(" · ");
+    if (!text) return tr("No content yet", "暂无内容");
+    return text.length > 140 ? `${text.slice(0, 140)}...` : text;
+  }
+
+  function getRenderTitle(stepId: StepId): string {
+    return steps.find((s) => s.id === stepId)?.title ?? stepId;
+  }
+
+  function getRenderDuration(stepId: StepId): number {
+    switch (stepId) {
+      case "importance":
+        return 14;
+      case "product":
+        return 10;
+      case "features":
+        return 28;
+      case "tech":
+        return 16;
+      case "impact":
+        return 8;
+      default:
+        return 10;
+    }
+  }
+
+  function getDefaultRenderSections(): RenderSection[] {
+    const ids: StepId[] = ["importance", "product", "features", "tech", "impact"];
+    return ids.map((id) => ({
+      id,
+      title: getRenderTitle(id),
+      status: "idle",
+      durationSec: getRenderDuration(id),
+      summary: summarizeStep(id),
+      version: 0,
+    }));
+  }
+
+  async function generateOneSection(sectionId: StepId) {
+    setSectionRenders((prev) => {
+      const current = prev.length ? prev : getDefaultRenderSections();
+      return current.map((item) =>
+        item.id === sectionId
+          ? {
+              ...item,
+              status: "generating",
+              summary: summarizeStep(sectionId),
+            }
+          : item,
+      );
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 700));
+
+    setSectionRenders((prev) => {
+      const current = prev.length ? prev : getDefaultRenderSections();
+      return current.map((item) =>
+        item.id === sectionId
+          ? {
+              ...item,
+              status: "done",
+              durationSec: getRenderDuration(sectionId),
+              summary: summarizeStep(sectionId),
+              version: item.version + 1,
+            }
+          : item,
+      );
+    });
+  }
+
+  async function startSectionGeneration() {
+    setExportReady(false);
+    setExportFileName(null);
+    setCombining(false);
+    setRenderingAll(true);
+    setSectionRenders(getDefaultRenderSections());
+
+    const ids: StepId[] = ["importance", "product", "features", "tech", "impact"];
+    for (const id of ids) {
+      // eslint-disable-next-line no-await-in-loop
+      await generateOneSection(id);
+    }
+
+    setRenderingAll(false);
+  }
+
+  async function regenerateSection(sectionId: StepId) {
+    if (renderingAll || combining) return;
+    setExportReady(false);
+    setExportFileName(null);
+    await generateOneSection(sectionId);
+  }
+
+  async function combineAndExport() {
+    if (combining) return;
+    setCombining(true);
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    setCombining(false);
+    const name = (projectName || "DemoDance").trim().replace(/\s+/g, "_");
+    setExportFileName(`${name}_final.mp4`);
+    setExportReady(true);
+  }
+
+  function scrollToRenderPanel() {
+    renderPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function getFieldValue(stepId: StepId, fieldKey: string): string {
@@ -939,7 +1051,84 @@ export default function Home() {
     }
   }
 
+  async function generateLogo() {
+    if (logoGenerating) return;
+    setLogoGenerating(true);
+    setChatError(null);
+
+    const productName = getFieldValue("product", "name").trim() || projectName.trim() || "DemoDance";
+    const slogan = getFieldValue("product", "slogan").trim();
+    const user = getFieldValue("audience", "user").trim();
+
+    const prompt = [
+      `Create a clean, modern app logo for a product named "${productName}".`,
+      slogan ? `Tagline/context: ${slogan}.` : "",
+      user ? `Target users: ${user}.` : "",
+      "Style: minimal, bold, high contrast, icon-first mark with transparent-like simple background.",
+      "No complex text blocks. Avoid photorealism.",
+      "Square composition, suitable for product launch page.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    try {
+      const response = await fetch("/api/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt,
+          aspect_ratio: "1:1",
+          size: "1K",
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Failed to generate logo");
+      }
+
+      const logoUrl = typeof data?.data?.[0]?.url === "string" ? data.data[0].url : "";
+      if (!logoUrl) {
+        throw new Error("No logo image returned");
+      }
+
+      updateField("product", "logo", logoUrl);
+      setActiveStepId("product");
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: tr("Logo Generated", "Logo 已生成"),
+          text: tr(
+            "Generated a new logo with Google GenAI and filled Product → Logo.",
+            "已用 Google GenAI 生成新 Logo，并写入 Product → Logo。",
+          ),
+        },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setChatError(message);
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: tr("Logo Failed", "Logo 生成失败"),
+          text: tr(
+            `Logo generation failed: ${message}`,
+            `Logo 生成失败：${message}`,
+          ),
+        },
+      ]);
+    } finally {
+      setLogoGenerating(false);
+    }
+  }
+
   const allDone = progress.every((p) => p.status === "done");
+  const allSectionsDone =
+    sectionRenders.length === 5 && sectionRenders.every((section) => section.status === "done");
 
   if (stage === "onboard") {
     const canStart = submission.trim().length >= 20 && !parsing;
@@ -1167,15 +1356,21 @@ export default function Home() {
         </button>
         <button
           disabled={!allDone}
-          onClick={startGenerate}
+          onClick={scrollToRenderPanel}
           className={`text-xs px-4 py-1.5 rounded font-medium ${
             allDone
               ? "bg-black text-white hover:bg-zinc-800"
               : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
           }`}
         >
-          {tr("✨ Generate Video", "✨ 生成视频")}
+          {tr("Go to Generate", "去底部生成")}
         </button>
+        <a
+          href="/section-video"
+          className="text-xs px-3 py-1.5 rounded font-medium bg-emerald-600 text-white hover:bg-emerald-700"
+        >
+          {tr("Next: Section Page", "下一步：分段生成页")}
+        </a>
       </header>
 
       {/* ===== Body ===== */}
@@ -1351,6 +1546,108 @@ export default function Home() {
               })}
             </div>
 
+            <section ref={renderPanelRef} className="mt-8 bg-white border border-zinc-200 rounded-xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    {tr("Section Video Generation", "分段视频生成")}
+                  </h3>
+                  <p className="text-[12px] text-zinc-500 mt-1">
+                    {tr(
+                      "Generate section clips in this page, regenerate any section, then combine and export.",
+                      "在本页分段生成视频，可单段重新生成，最后组合导出。",
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={startSectionGeneration}
+                  disabled={!allDone || renderingAll || combining}
+                  className={`text-xs px-3 py-1.5 rounded font-medium ${
+                    !allDone || renderingAll || combining
+                      ? "bg-zinc-200 text-zinc-400 cursor-not-allowed"
+                      : "bg-black text-white hover:bg-zinc-800"
+                  }`}
+                >
+                  {renderingAll
+                    ? tr("Generating...", "生成中...")
+                    : tr("Start Generate Video", "开始生成视频")}
+                </button>
+              </div>
+
+              {sectionRenders.length > 0 && (
+                <div className="mt-4 grid gap-3">
+                  {sectionRenders.map((section) => (
+                    <div
+                      key={section.id}
+                      className="border border-zinc-200 rounded-lg p-3 bg-zinc-50/70"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium flex-1">{section.title}</div>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full ${
+                            section.status === "done"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : section.status === "generating"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-zinc-100 text-zinc-500"
+                          }`}
+                        >
+                          {section.status === "done"
+                            ? tr(`Done · v${section.version}`, `已完成 · v${section.version}`)
+                            : section.status === "generating"
+                              ? tr("Generating", "生成中")
+                              : tr("Waiting", "待生成")}
+                        </span>
+                      </div>
+                      <div className="text-[12px] text-zinc-500 mt-1">
+                        {tr(`Duration: ${section.durationSec}s`, `时长：${section.durationSec}秒`)}
+                      </div>
+                      <div className="text-[12px] text-zinc-700 mt-2">{section.summary}</div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          onClick={() => regenerateSection(section.id)}
+                          disabled={renderingAll || combining || section.status === "generating"}
+                          className={`text-xs px-2.5 py-1 rounded border ${
+                            renderingAll || combining || section.status === "generating"
+                              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
+                              : "border-zinc-300 hover:bg-zinc-100"
+                          }`}
+                        >
+                          {section.status === "done"
+                            ? tr("Regenerate", "重新生成")
+                            : tr("Generate", "生成")}
+                        </button>
+                        {section.status === "done" && (
+                          <span className="text-[11px] text-zinc-500">
+                            {tr("Clip ready", "片段已就绪")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 pt-4 border-t border-zinc-200 flex items-center gap-2">
+                <button
+                  onClick={combineAndExport}
+                  disabled={!allSectionsDone || combining}
+                  className={`text-xs px-3 py-1.5 rounded font-medium ${
+                    !allSectionsDone || combining
+                      ? "bg-zinc-200 text-zinc-400 cursor-not-allowed"
+                      : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  }`}
+                >
+                  {combining ? tr("Combining...", "组合中...") : tr("Combine & Export", "组合并导出")}
+                </button>
+                {exportReady && exportFileName && (
+                  <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+                    {tr("Export ready:", "导出完成：")} {exportFileName}
+                  </div>
+                )}
+              </div>
+            </section>
+
             <div className="h-12" />
           </div>
         </main>
@@ -1419,8 +1716,16 @@ export default function Home() {
                 <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
                   {tr("📎 Assets", "📎 素材")}
                 </button>
-                <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
-                  🎨 Logo
+                <button
+                  onClick={generateLogo}
+                  disabled={logoGenerating}
+                  className={`text-[11px] px-2 py-0.5 rounded ${
+                    logoGenerating
+                      ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                  }`}
+                >
+                  {logoGenerating ? tr("🎨 Generating...", "🎨 生成中...") : "🎨 Logo"}
                 </button>
                 <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
                   {tr("🔗 Links", "🔗 链接")}
@@ -1616,61 +1921,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ===== Generating overlay ===== */}
-      {generating && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 w-[420px] shadow-xl">
-            <div className="text-lg font-semibold mb-1">
-              {generating.done ? tr("🎉 Video generation complete", "🎉 视频生成完成") : tr("✨ Generating your launch video...", "✨ 正在合成你的 launch 视频…")}
-            </div>
-            <div className="text-xs text-zinc-500 mb-5">
-              {generating.done
-                ? tr("You can download, share, or continue editing the script.", "可以下载、分享，或继续编辑脚本。")
-                : tr("Please wait, around 1 minute.", "请稍等，大概 1 分钟。")}
-            </div>
-            <div className="flex flex-col gap-2 mb-5">
-              {[
-                tr("Draft script & storyboard", "撰写脚本分镜"),
-                tr("Fetch web evidence", "联网抓取问题佐证"),
-                tr("Synthesize voice & subtitles", "合成配音 & 字幕"),
-                tr("Render final video", "渲染最终视频"),
-              ].map((label, i) => {
-                const stageDone = generating.done || i < generating.stage;
-                const stageActive = !generating.done && i === generating.stage;
-                return (
-                  <div key={label} className="flex items-center gap-3 text-sm">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
-                        stageDone
-                          ? "bg-black text-white"
-                          : stageActive
-                            ? "bg-zinc-300 text-zinc-700 animate-pulse"
-                            : "bg-zinc-100 text-zinc-400"
-                      }`}
-                    >
-                      {stageDone ? "✓" : i + 1}
-                    </div>
-                    <div className={stageDone ? "text-zinc-800" : "text-zinc-500"}>{label}</div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setGenerating(null)}
-                className="text-xs px-3 py-1.5 rounded border border-zinc-300 hover:bg-zinc-100"
-              >
-                {generating.done ? tr("Close", "关闭") : tr("Run in background", "后台运行")}
-              </button>
-              {generating.done && (
-                <button className="text-xs px-3 py-1.5 rounded bg-black text-white hover:bg-zinc-800">
-                  {tr("⬇ Download Video", "⬇ 下载视频")}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

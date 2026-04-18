@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     model,
     messages: payloadMessages,
     temperature: typeof data.temperature === "number" ? data.temperature : 0.7,
-    max_tokens: typeof data.max_tokens === "number" ? data.max_tokens : 512,
+    max_tokens: typeof data.max_tokens === "number" ? data.max_tokens : 5000,
   };
 
   try {
