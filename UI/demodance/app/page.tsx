@@ -48,6 +48,8 @@ type RenderSection = {
   progress?: number;
   apiState?: string;
   taskId?: string;
+  videoUrl?: string;
+  rawResponse?: any;
 };
 
 function getInitialSteps(locale: "en" | "zh"): Step[] {
@@ -167,6 +169,7 @@ export default function Home() {
   const [combining, setCombining] = useState(false);
   const [exportReady, setExportReady] = useState(false);
   const [exportFileName, setExportFileName] = useState<string | null>(null);
+  const [exportFileUrl, setExportFileUrl] = useState<string | null>(null);
   const [storyPromptPreview, setStoryPromptPreview] = useState<string | null>(null);
   const [storyPromptSources, setStoryPromptSources] = useState<string[]>([]);
   const [loadingStoryPrompt, setLoadingStoryPrompt] = useState(false);
@@ -876,8 +879,8 @@ export default function Home() {
           setSectionRenders((prev) =>
             prev.map((item) => {
               if (item.id === sectionId) {
-                // If it's queued, we might not have progress yet.
-                return { ...item, progress: nextProgress ?? item.progress, apiState: state };
+                const videoUrl = statusData.data?.content?.video_url || statusData.content?.video_url || statusData.data?.video_url || statusData.video_url;
+                return { ...item, progress: nextProgress ?? item.progress, apiState: state, videoUrl: videoUrl || item.videoUrl, rawResponse: statusData };
               }
               return item;
             })
@@ -957,7 +960,17 @@ export default function Home() {
       setSectionRenders((prev) =>
         prev.map((item) => {
           if (item.id === sectionId) {
-            return { ...item, progress: nextProgress ?? item.progress, apiState: state };
+            const videoUrl = statusData.data?.content?.video_url || statusData.content?.video_url || statusData.data?.video_url || statusData.video_url;
+            const isDone = state === "succeeded";
+            return {
+              ...item,
+              progress: nextProgress ?? item.progress,
+              apiState: state,
+              videoUrl: videoUrl || item.videoUrl,
+              rawResponse: statusData,
+              status: isDone ? "done" : item.status,
+              version: isDone ? item.version + 1 : item.version,
+            };
           }
           return item;
         })
@@ -970,11 +983,57 @@ export default function Home() {
   async function combineAndExport() {
     if (combining) return;
     setCombining(true);
-    await new Promise((resolve) => setTimeout(resolve, 1400));
-    setCombining(false);
-    const name = (projectName || "DemoDance").trim().replace(/\s+/g, "_");
-    setExportFileName(`${name}_final.mp4`);
-    setExportReady(true);
+    setExportReady(false);
+    setExportFileName(null);
+    if (exportFileUrl) URL.revokeObjectURL(exportFileUrl);
+    setExportFileUrl(null);
+
+    try {
+      const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+      const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
+
+      const ffmpeg = new FFmpeg();
+      
+      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+      });
+
+      const validSections = sectionRenders.filter(s => s.status === "done" && s.videoUrl);
+      
+      if (validSections.length === 0) {
+        throw new Error("No completed video sections found to combine.");
+      }
+      
+      let concatList = "";
+      
+      for (let i = 0; i < validSections.length; i++) {
+        const s = validSections[i];
+        const proxyUrl = `/api/video/proxy?url=${encodeURIComponent(s.videoUrl!)}`;
+        const inputName = `input${i}.mp4`;
+        await ffmpeg.writeFile(inputName, await fetchFile(proxyUrl));
+        concatList += `file '${inputName}'\n`;
+      }
+      
+      await ffmpeg.writeFile("concat.txt", concatList);
+      
+      await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "output.mp4"]);
+      
+      const data = await ffmpeg.readFile("output.mp4");
+      const blob = new Blob([data as Uint8Array], { type: "video/mp4" });
+      const url = URL.createObjectURL(blob);
+      
+      const name = (projectName || "DemoDance").trim().replace(/\s+/g, "_");
+      setExportFileName(`${name}_final.mp4`);
+      setExportFileUrl(url);
+      setExportReady(true);
+    } catch (e) {
+      console.error("FFmpeg combine failed", e);
+      alert(locale === "en" ? "Failed to combine videos." : "视频拼接失败。");
+    } finally {
+      setCombining(false);
+    }
   }
 
   function scrollToRenderPanel() {
@@ -1677,7 +1736,7 @@ export default function Home() {
                       <div className="flex items-center gap-2">
                         <div className="text-sm font-medium flex-1">{section.title}</div>
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full ${
+                          className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1.5 ${
                             section.status === "done"
                               ? "bg-emerald-100 text-emerald-700"
                               : section.status === "generating"
@@ -1685,6 +1744,12 @@ export default function Home() {
                                 : "bg-zinc-100 text-zinc-500"
                           }`}
                         >
+                          {section.status === "generating" && (
+                            <svg className="animate-spin h-2.5 w-2.5 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          )}
                           {section.status === "done"
                             ? tr(`Done · v${section.version}`, `已完成 · v${section.version}`)
                             : section.status === "generating"
@@ -1721,9 +1786,34 @@ export default function Home() {
                           </button>
                         )}
                         {section.status === "done" && (
-                          <span className="text-[11px] text-zinc-500">
-                            {tr("Clip ready", "片段已就绪")}
-                          </span>
+                          <>
+                            <span className="text-[11px] text-zinc-500">
+                              {tr("Clip ready", "片段已就绪")}
+                              <span className="text-zinc-400 ml-1">({section.apiState || "no-api-state"})</span>
+                            </span>
+                            {section.videoUrl ? (
+                              <a
+                                href={section.videoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 ml-1"
+                              >
+                                {tr("Preview", "预览")}
+                              </a>
+                            ) : (
+                              <div className="flex flex-col gap-1 w-full mt-2 border-t border-zinc-200 pt-2">
+                                <span className="text-xs text-red-500 border border-red-200 rounded px-1 w-fit">
+                                  No URL Extracted
+                                </span>
+                                {section.rawResponse && (
+                                  <details className="text-[10px] text-zinc-500 overflow-hidden bg-zinc-100 rounded p-1">
+                                    <summary className="cursor-pointer font-medium text-zinc-600">Raw API Response</summary>
+                                    <pre className="max-h-32 overflow-y-auto mt-1 p-1 bg-zinc-200 rounded">{JSON.stringify(section.rawResponse, null, 2)}</pre>
+                                  </details>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -1743,10 +1833,15 @@ export default function Home() {
                 >
                   {combining ? tr("Combining...", "组合中...") : tr("Combine & Export", "组合并导出")}
                 </button>
-                {exportReady && exportFileName && (
-                  <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
-                    {tr("Export ready:", "导出完成：")} {exportFileName}
-                  </div>
+                {exportReady && exportFileName && exportFileUrl && (
+                  <a 
+                    href={exportFileUrl}
+                    download={exportFileName}
+                    className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-1.5 hover:bg-emerald-100 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    {tr("Download:", "下载：")} {exportFileName}
+                  </a>
                 )}
               </div>
             </section>
