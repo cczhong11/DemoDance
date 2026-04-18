@@ -92,6 +92,7 @@ Current pushed schema includes:
 - `POST /api/video/files`
 - `POST /api/video/understand`
 - `POST /api/images/generations`
+- `POST /api/ffmpeg_understand`
 
 ## Examples
 
@@ -214,6 +215,35 @@ curl -X POST http://localhost:3000/api/images/generations \
   }'
 ```
 
+### FFmpeg video understand (frame-by-frame + Qwen3-VL-8B)
+
+This API extracts frames every second using `ffmpeg`, then sends frame batches to a vision model.
+
+JSON (public video URL):
+
+```bash
+curl -X POST http://localhost:3000/api/ffmpeg_understand \
+  -H "Content-Type: application/json" \
+  -d '{
+    "video_url":"https://ark-doc.tos-ap-southeast-1.bytepluses.com/video_understanding.mp4",
+    "prompt":"Describe key actions and risks per second",
+    "fps":1,
+    "batch_size":8,
+    "model":"Qwen3-VL-8B"
+  }'
+```
+
+Multipart (local upload):
+
+```bash
+curl -X POST http://localhost:3000/api/ffmpeg_understand \
+  -F "file=@/absolute/path/to/video.mp4" \
+  -F "prompt=Describe key actions and risks per second" \
+  -F "fps=1" \
+  -F "batch_size=8" \
+  -F "model=Qwen3-VL-8B"
+```
+
 ## Notes
 
 - Butterbase config and schema workflow are documented in the `Database (Butterbase)` section above.
@@ -227,3 +257,7 @@ curl -X POST http://localhost:3000/api/images/generations \
   - text-to-image (`prompt` only)
   - image-to-image (`prompt` + `image`)
   - multi-image blend (`prompt` + `image: []`)
+- `POST /api/ffmpeg_understand`:
+  - Requires `ffmpeg` installed on server
+  - Accepts JSON `video_url` or multipart `file`
+  - Extracts frames at configured `fps` and batches to vision model

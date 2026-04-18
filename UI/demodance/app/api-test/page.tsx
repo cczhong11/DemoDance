@@ -76,6 +76,15 @@ export default function ApiTestPage() {
   const [imageWatermark, setImageWatermark] = useState(false);
   const [imageResponseFormat, setImageResponseFormat] = useState("url");
   const [imageGenerationResult, setImageGenerationResult] = useState<ApiResult | null>(null);
+  const [ffmpegInputType, setFfmpegInputType] = useState<"video_url" | "file">("video_url");
+  const [ffmpegVideoUrl, setFfmpegVideoUrl] = useState("https://ark-doc.tos-ap-southeast-1.bytepluses.com/video_understanding.mp4");
+  const [ffmpegFile, setFfmpegFile] = useState<File | null>(null);
+  const [ffmpegPrompt, setFfmpegPrompt] = useState("Describe key actions and risks per second");
+  const [ffmpegFps, setFfmpegFps] = useState("1");
+  const [ffmpegBatchSize, setFfmpegBatchSize] = useState("8");
+  const [ffmpegModel, setFfmpegModel] = useState("Qwen3-VL-8B");
+  const [ffmpegMaxTokens, setFfmpegMaxTokens] = useState("1600");
+  const [ffmpegUnderstandResult, setFfmpegUnderstandResult] = useState<ApiResult | null>(null);
 
   const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 
@@ -304,6 +313,68 @@ export default function ApiTestPage() {
 
     const result = await callJsonApi("POST", "/api/images/generations", payload);
     setImageGenerationResult(result);
+  }
+
+  async function testFfmpegUnderstand(event: FormEvent) {
+    event.preventDefault();
+
+    if (ffmpegInputType === "video_url") {
+      if (!ffmpegVideoUrl.trim()) {
+        setFfmpegUnderstandResult({
+          status: 400,
+          body: { error: "video_url is required in video_url mode." },
+          rawText: JSON.stringify({ error: "video_url is required in video_url mode." }),
+        });
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        video_url: ffmpegVideoUrl.trim(),
+        prompt: ffmpegPrompt,
+        fps: Number.parseFloat(ffmpegFps) || 1,
+        batch_size: Number.parseInt(ffmpegBatchSize, 10) || 8,
+        model: ffmpegModel.trim() || "Qwen3-VL-8B",
+        max_tokens: Number.parseInt(ffmpegMaxTokens, 10) || 1600,
+      };
+
+      const result = await callJsonApi("POST", "/api/ffmpeg_understand", payload);
+      setFfmpegUnderstandResult(result);
+      return;
+    }
+
+    if (!ffmpegFile) {
+      setFfmpegUnderstandResult({
+        status: 400,
+        body: { error: "Please choose a video file first." },
+        rawText: JSON.stringify({ error: "Please choose a video file first." }),
+      });
+      return;
+    }
+
+    const form = new FormData();
+    form.append("file", ffmpegFile);
+    form.append("prompt", ffmpegPrompt);
+    form.append("fps", ffmpegFps);
+    form.append("batch_size", ffmpegBatchSize);
+    form.append("model", ffmpegModel.trim() || "Qwen3-VL-8B");
+    form.append("max_tokens", ffmpegMaxTokens);
+
+    const response = await fetch("/api/ffmpeg_understand", {
+      method: "POST",
+      body: form,
+    });
+    const rawText = await response.text();
+    let parsed: unknown = rawText;
+    try {
+      parsed = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // keep raw text
+    }
+    setFfmpegUnderstandResult({
+      status: response.status,
+      body: parsed,
+      rawText,
+    });
   }
 
   return (
@@ -670,6 +741,91 @@ export default function ApiTestPage() {
           {imageGenerationResult && (
             <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
 {`status: ${imageGenerationResult.status}\n${pretty(imageGenerationResult.body)}`}
+            </pre>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
+          <h2 className="text-xl font-medium">FFmpeg Understand</h2>
+          <form onSubmit={testFfmpegUnderstand} className="space-y-3">
+            <label className="text-sm text-zinc-300">
+              input type
+              <select
+                value={ffmpegInputType}
+                onChange={(e) => setFfmpegInputType(e.target.value as "video_url" | "file")}
+                className="ml-2 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+              >
+                <option value="video_url">video_url</option>
+                <option value="file">file upload</option>
+              </select>
+            </label>
+
+            {ffmpegInputType === "video_url" ? (
+              <input
+                value={ffmpegVideoUrl}
+                onChange={(e) => setFfmpegVideoUrl(e.target.value)}
+                className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+                placeholder="https://...mp4"
+              />
+            ) : (
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) => setFfmpegFile(e.target.files?.[0] ?? null)}
+                className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              />
+            )}
+
+            <textarea
+              value={ffmpegPrompt}
+              onChange={(e) => setFfmpegPrompt(e.target.value)}
+              className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder="Describe key actions and risks per second"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm text-zinc-300">
+                fps
+                <input
+                  value={ffmpegFps}
+                  onChange={(e) => setFfmpegFps(e.target.value)}
+                  className="ml-2 w-20 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+              <label className="text-sm text-zinc-300">
+                batch_size
+                <input
+                  value={ffmpegBatchSize}
+                  onChange={(e) => setFfmpegBatchSize(e.target.value)}
+                  className="ml-2 w-20 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+              <label className="text-sm text-zinc-300">
+                model
+                <input
+                  value={ffmpegModel}
+                  onChange={(e) => setFfmpegModel(e.target.value)}
+                  className="ml-2 w-44 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+              <label className="text-sm text-zinc-300">
+                max_tokens
+                <input
+                  value={ffmpegMaxTokens}
+                  onChange={(e) => setFfmpegMaxTokens(e.target.value)}
+                  className="ml-2 w-24 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+            </div>
+
+            <button type="submit" className="rounded-md bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-4 py-2 font-medium">
+              Test POST /api/ffmpeg_understand
+            </button>
+          </form>
+
+          {ffmpegUnderstandResult && (
+            <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
+{`status: ${ffmpegUnderstandResult.status}\n${pretty(ffmpegUnderstandResult.body)}`}
             </pre>
           )}
         </section>
