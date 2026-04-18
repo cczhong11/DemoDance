@@ -41,6 +41,9 @@ export default function ApiTestPage() {
   const [audioBase64, setAudioBase64] = useState(true);
   const [audioResult, setAudioResult] = useState<ApiResult | null>(null);
   const [audioPreviewSrc, setAudioPreviewSrc] = useState<string>("");
+  const [srtFile, setSrtFile] = useState<File | null>(null);
+  const [srtModel, setSrtModel] = useState("whisper-1");
+  const [srtResult, setSrtResult] = useState<ApiResult | null>(null);
 
   const [videoPrompt, setVideoPrompt] = useState("meta engineer write code");
   const [videoDuration, setVideoDuration] = useState(5);
@@ -53,6 +56,26 @@ export default function ApiTestPage() {
   const [pageSize, setPageSize] = useState(3);
   const [listStatus, setListStatus] = useState("succeeded");
   const [videoListResult, setVideoListResult] = useState<ApiResult | null>(null);
+  const [understandVideoFile, setUnderstandVideoFile] = useState<File | null>(null);
+  const [understandPreprocessFps, setUnderstandPreprocessFps] = useState("0.3");
+  const [videoUploadResult, setVideoUploadResult] = useState<ApiResult | null>(null);
+  const [understandInputType, setUnderstandInputType] = useState<"file_id" | "video_url">("file_id");
+  const [understandFileId, setUnderstandFileId] = useState("");
+  const [understandVideoUrl, setUnderstandVideoUrl] = useState("");
+  const [understandPrompt, setUnderstandPrompt] = useState("Please describe the movement sequence in this video.");
+  const [understandFps, setUnderstandFps] = useState("1");
+  const [videoUnderstandResult, setVideoUnderstandResult] = useState<ApiResult | null>(null);
+  const [imageMode, setImageMode] = useState<"text" | "image" | "multi">("text");
+  const [imagePrompt, setImagePrompt] = useState(
+    "Vibrant close-up editorial portrait, model with piercing gaze, rich color blocking, dramatic studio lighting.",
+  );
+  const [imageInputUrl, setImageInputUrl] = useState("");
+  const [imageInputUrlsText, setImageInputUrlsText] = useState("");
+  const [imageSize, setImageSize] = useState("2K");
+  const [imageOutputFormat, setImageOutputFormat] = useState("png");
+  const [imageWatermark, setImageWatermark] = useState(false);
+  const [imageResponseFormat, setImageResponseFormat] = useState("url");
+  const [imageGenerationResult, setImageGenerationResult] = useState<ApiResult | null>(null);
 
   const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 
@@ -109,6 +132,36 @@ export default function ApiTestPage() {
     }
   }
 
+  async function testAudioToSrt(event: FormEvent) {
+    event.preventDefault();
+    if (!srtFile) {
+      setSrtResult({
+        status: 400,
+        body: { error: "Please choose an audio file first." },
+        rawText: JSON.stringify({ error: "Please choose an audio file first." }),
+      });
+      return;
+    }
+
+    const form = new FormData();
+    form.append("file", srtFile);
+    if (srtModel.trim()) {
+      form.append("model", srtModel.trim());
+    }
+
+    const response = await fetch("/api/audio/srt", {
+      method: "POST",
+      body: form,
+    });
+
+    const rawText = await response.text();
+    setSrtResult({
+      status: response.status,
+      body: rawText,
+      rawText,
+    });
+  }
+
   async function getVideoTaskStatus(event: FormEvent) {
     event.preventDefault();
     if (!taskId.trim()) return;
@@ -125,6 +178,132 @@ export default function ApiTestPage() {
     });
     const result = await callJsonApi("GET", `/api/video/tasks?${search.toString()}`);
     setVideoListResult(result);
+  }
+
+  async function uploadVideoFileForUnderstanding(event: FormEvent) {
+    event.preventDefault();
+    if (!understandVideoFile) {
+      setVideoUploadResult({
+        status: 400,
+        body: { error: "Please choose a video file first." },
+        rawText: JSON.stringify({ error: "Please choose a video file first." }),
+      });
+      return;
+    }
+
+    const form = new FormData();
+    form.append("file", understandVideoFile);
+    form.append("purpose", "user_data");
+    if (understandPreprocessFps.trim()) {
+      form.append("preprocess_fps", understandPreprocessFps.trim());
+    }
+
+    const response = await fetch("/api/video/files", {
+      method: "POST",
+      body: form,
+    });
+
+    const rawText = await response.text();
+    let parsed: unknown = rawText;
+    try {
+      parsed = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // keep raw text
+    }
+
+    setVideoUploadResult({
+      status: response.status,
+      body: parsed,
+      rawText,
+    });
+
+    const body = parsed as { id?: string } | undefined;
+    if (body?.id) {
+      setUnderstandFileId(body.id);
+      setUnderstandInputType("file_id");
+    }
+  }
+
+  async function testVideoUnderstand(event: FormEvent) {
+    event.preventDefault();
+
+    const payload: Record<string, unknown> = {
+      prompt: understandPrompt,
+    };
+
+    if (understandInputType === "file_id") {
+      if (!understandFileId.trim()) {
+        setVideoUnderstandResult({
+          status: 400,
+          body: { error: "file_id is required when using file_id mode." },
+          rawText: JSON.stringify({ error: "file_id is required when using file_id mode." }),
+        });
+        return;
+      }
+      payload.file_id = understandFileId.trim();
+    } else {
+      if (!understandVideoUrl.trim()) {
+        setVideoUnderstandResult({
+          status: 400,
+          body: { error: "video_url is required when using video_url mode." },
+          rawText: JSON.stringify({ error: "video_url is required when using video_url mode." }),
+        });
+        return;
+      }
+      payload.video_url = understandVideoUrl.trim();
+      if (understandFps.trim()) {
+        payload.fps = Number.parseFloat(understandFps.trim());
+      }
+    }
+
+    const result = await callJsonApi("POST", "/api/video/understand", payload);
+    setVideoUnderstandResult(result);
+  }
+
+  async function testImageGeneration(event: FormEvent) {
+    event.preventDefault();
+
+    const payload: Record<string, unknown> = {
+      prompt: imagePrompt,
+      size: imageSize,
+      output_format: imageOutputFormat,
+      response_format: imageResponseFormat,
+      watermark: imageWatermark,
+    };
+
+    if (imageMode === "image") {
+      if (!imageInputUrl.trim()) {
+        setImageGenerationResult({
+          status: 400,
+          body: { error: "image URL/Base64 is required for image-to-image mode." },
+          rawText: JSON.stringify({ error: "image URL/Base64 is required for image-to-image mode." }),
+        });
+        return;
+      }
+      payload.image = imageInputUrl.trim();
+    }
+
+    if (imageMode === "multi") {
+      const imageList = imageInputUrlsText
+        .split(/\n|,/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      if (imageList.length < 2) {
+        setImageGenerationResult({
+          status: 400,
+          body: { error: "Provide at least 2 image URLs/Base64 items for multi-image mode." },
+          rawText: JSON.stringify({ error: "Provide at least 2 image URLs/Base64 items for multi-image mode." }),
+        });
+        return;
+      }
+
+      payload.image = imageList;
+      payload.sequential_image_generation = "disabled";
+    }
+
+    const result = await callJsonApi("POST", "/api/images/generations", payload);
+    setImageGenerationResult(result);
   }
 
   return (
@@ -191,6 +370,32 @@ export default function ApiTestPage() {
           {audioResult && (
             <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
 {`status: ${audioResult.status}\n${audioResult.rawText.slice(0, 4000)}`}
+            </pre>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
+          <h2 className="text-xl font-medium">Audio to SRT</h2>
+          <form onSubmit={testAudioToSrt} className="space-y-3">
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={(e) => setSrtFile(e.target.files?.[0] ?? null)}
+              className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+            />
+            <input
+              value={srtModel}
+              onChange={(e) => setSrtModel(e.target.value)}
+              className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder="STT model (default whisper-1)"
+            />
+            <button type="submit" className="rounded-md bg-violet-500 hover:bg-violet-400 text-zinc-950 px-4 py-2 font-medium">
+              Test POST /api/audio/srt
+            </button>
+          </form>
+          {srtResult && (
+            <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap">
+{`status: ${srtResult.status}\n${srtResult.rawText.slice(0, 8000)}`}
             </pre>
           )}
         </section>
@@ -293,6 +498,178 @@ export default function ApiTestPage() {
           {videoListResult && (
             <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
 {`status: ${videoListResult.status}\n${pretty(videoListResult.body)}`}
+            </pre>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
+          <h2 className="text-xl font-medium">Video Understand</h2>
+
+          <form onSubmit={uploadVideoFileForUnderstanding} className="space-y-3">
+            <p className="text-sm text-zinc-300">1) Optional: Upload local video file to get a reusable file_id.</p>
+            <input
+              type="file"
+              accept="video/*"
+              onChange={(e) => setUnderstandVideoFile(e.target.files?.[0] ?? null)}
+              className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+            />
+            <input
+              value={understandPreprocessFps}
+              onChange={(e) => setUnderstandPreprocessFps(e.target.value)}
+              className="w-40 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder="preprocess_fps (e.g. 0.3)"
+            />
+            <button type="submit" className="rounded-md bg-indigo-500 hover:bg-indigo-400 text-zinc-950 px-4 py-2 font-medium">
+              Test POST /api/video/files
+            </button>
+          </form>
+
+          {videoUploadResult && (
+            <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
+{`status: ${videoUploadResult.status}\n${pretty(videoUploadResult.body)}`}
+            </pre>
+          )}
+
+          <form onSubmit={testVideoUnderstand} className="space-y-3">
+            <p className="text-sm text-zinc-300">2) Run video understanding via Responses API.</p>
+            <label className="text-sm text-zinc-300">
+              input type
+              <select
+                value={understandInputType}
+                onChange={(e) => setUnderstandInputType(e.target.value as "file_id" | "video_url")}
+                className="ml-2 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+              >
+                <option value="file_id">file_id (recommended)</option>
+                <option value="video_url">video_url / base64 data URL</option>
+              </select>
+            </label>
+
+            {understandInputType === "file_id" ? (
+              <input
+                value={understandFileId}
+                onChange={(e) => setUnderstandFileId(e.target.value)}
+                className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+                placeholder="file-2026xxxx"
+              />
+            ) : (
+              <>
+                <input
+                  value={understandVideoUrl}
+                  onChange={(e) => setUnderstandVideoUrl(e.target.value)}
+                  className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+                  placeholder="https://...mp4 or data:video/mp4;base64,..."
+                />
+                <input
+                  value={understandFps}
+                  onChange={(e) => setUnderstandFps(e.target.value)}
+                  className="w-40 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+                  placeholder="fps (0.2~5)"
+                />
+              </>
+            )}
+
+            <textarea
+              value={understandPrompt}
+              onChange={(e) => setUnderstandPrompt(e.target.value)}
+              className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder="Understanding prompt"
+            />
+            <button type="submit" className="rounded-md bg-rose-500 hover:bg-rose-400 text-zinc-950 px-4 py-2 font-medium">
+              Test POST /api/video/understand
+            </button>
+          </form>
+
+          {videoUnderstandResult && (
+            <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
+{`status: ${videoUnderstandResult.status}\n${pretty(videoUnderstandResult.body)}`}
+            </pre>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
+          <h2 className="text-xl font-medium">Image Generation</h2>
+          <form onSubmit={testImageGeneration} className="space-y-3">
+            <label className="text-sm text-zinc-300">
+              mode
+              <select
+                value={imageMode}
+                onChange={(e) => setImageMode(e.target.value as "text" | "image" | "multi")}
+                className="ml-2 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+              >
+                <option value="text">text-to-image</option>
+                <option value="image">image-to-image</option>
+                <option value="multi">multi-image blending</option>
+              </select>
+            </label>
+
+            <textarea
+              value={imagePrompt}
+              onChange={(e) => setImagePrompt(e.target.value)}
+              className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder="Image generation prompt"
+            />
+
+            {imageMode === "image" && (
+              <input
+                value={imageInputUrl}
+                onChange={(e) => setImageInputUrl(e.target.value)}
+                className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+                placeholder="Input image URL or data:image/...;base64,..."
+              />
+            )}
+
+            {imageMode === "multi" && (
+              <textarea
+                value={imageInputUrlsText}
+                onChange={(e) => setImageInputUrlsText(e.target.value)}
+                className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+                placeholder="Enter 2+ image URLs/Base64, separated by comma or newline"
+              />
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm text-zinc-300">
+                size
+                <input
+                  value={imageSize}
+                  onChange={(e) => setImageSize(e.target.value)}
+                  className="ml-2 w-24 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+              <label className="text-sm text-zinc-300">
+                output_format
+                <input
+                  value={imageOutputFormat}
+                  onChange={(e) => setImageOutputFormat(e.target.value)}
+                  className="ml-2 w-24 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+              <label className="text-sm text-zinc-300">
+                response_format
+                <input
+                  value={imageResponseFormat}
+                  onChange={(e) => setImageResponseFormat(e.target.value)}
+                  className="ml-2 w-24 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={imageWatermark}
+                  onChange={(e) => setImageWatermark(e.target.checked)}
+                />
+                watermark
+              </label>
+            </div>
+
+            <button type="submit" className="rounded-md bg-orange-500 hover:bg-orange-400 text-zinc-950 px-4 py-2 font-medium">
+              Test POST /api/images/generations
+            </button>
+          </form>
+
+          {imageGenerationResult && (
+            <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
+{`status: ${imageGenerationResult.status}\n${pretty(imageGenerationResult.body)}`}
             </pre>
           )}
         </section>

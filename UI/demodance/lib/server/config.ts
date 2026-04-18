@@ -4,12 +4,15 @@ export type IonRouterConfig = {
   defaultTextModel: string;
   defaultTtsModel: string;
   defaultTtsVoice: string;
+  defaultSttModel: string;
 };
 
 export type BytePlusConfig = {
   apiKey: string;
   baseUrl: string;
   defaultVideoModel: string;
+  defaultVideoUnderstandModel: string;
+  defaultImageModel: string;
 };
 
 export function getIonRouterConfig(): IonRouterConfig {
@@ -19,6 +22,7 @@ export function getIonRouterConfig(): IonRouterConfig {
     defaultTextModel: process.env.IONROUTER_TEXT_MODEL ?? "qwen3-30b-a3b",
     defaultTtsModel: process.env.IONROUTER_TTS_MODEL ?? "orpheus-3b",
     defaultTtsVoice: process.env.IONROUTER_TTS_VOICE ?? "tara",
+    defaultSttModel: process.env.IONROUTER_STT_MODEL ?? "whisper-1",
   };
 }
 
@@ -30,5 +34,7 @@ export function getBytePlusConfig(): BytePlusConfig {
       "",
     ),
     defaultVideoModel: process.env.BYTEPLUS_VIDEO_MODEL ?? "dreamina-seedance-2-0-260128",
+    defaultVideoUnderstandModel: process.env.BYTEPLUS_VIDEO_UNDERSTAND_MODEL ?? "seed-2-0-lite-260228",
+    defaultImageModel: process.env.BYTEPLUS_IMAGE_MODEL ?? "seedream-5-0-260128",
   };
 }

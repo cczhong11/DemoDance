@@ -1,0 +1,369 @@
+{
+  "name": "init demodance project schema",
+  "schema": {
+    "tables": {
+      "projects": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "name": {
+            "type": "text",
+            "nullable": false
+          },
+          "status": {
+            "type": "text",
+            "default": "'draft'"
+          },
+          "active_step": {
+            "type": "text",
+            "default": "'audience'"
+          },
+          "owner_ref": {
+            "type": "text"
+          },
+          "metadata": {
+            "type": "jsonb"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "updated_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "project_steps": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "step": {
+            "type": "text",
+            "nullable": false
+          },
+          "position": {
+            "type": "integer",
+            "nullable": false
+          },
+          "status": {
+            "type": "text",
+            "default": "'pending'"
+          },
+          "completed_at": {
+            "type": "timestamptz"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "updated_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "project_step_fields": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "step": {
+            "type": "text",
+            "nullable": false
+          },
+          "field_key": {
+            "type": "text",
+            "nullable": false
+          },
+          "label": {
+            "type": "text"
+          },
+          "value_text": {
+            "type": "text",
+            "default": "''"
+          },
+          "placeholder": {
+            "type": "text"
+          },
+          "source": {
+            "type": "text",
+            "default": "'user'"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "updated_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "project_step_documents": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "step": {
+            "type": "text",
+            "nullable": false
+          },
+          "slug": {
+            "type": "text",
+            "nullable": false
+          },
+          "title": {
+            "type": "text",
+            "nullable": false
+          },
+          "status": {
+            "type": "text",
+            "default": "'draft'"
+          },
+          "content_md": {
+            "type": "text",
+            "default": "''"
+          },
+          "created_by_role": {
+            "type": "text",
+            "default": "'user'"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "updated_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "project_step_document_messages": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "document_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "role": {
+            "type": "text",
+            "nullable": false
+          },
+          "text": {
+            "type": "text",
+            "nullable": false
+          },
+          "tag": {
+            "type": "text"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "project_assets": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "kind": {
+            "type": "text",
+            "nullable": false
+          },
+          "file_name": {
+            "type": "text"
+          },
+          "mime_type": {
+            "type": "text"
+          },
+          "file_size_bytes": {
+            "type": "bigint"
+          },
+          "storage_url": {
+            "type": "text"
+          },
+          "storage_path": {
+            "type": "text"
+          },
+          "provider": {
+            "type": "text"
+          },
+          "provider_asset_id": {
+            "type": "text"
+          },
+          "metadata": {
+            "type": "jsonb"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "generation_jobs": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "status": {
+            "type": "text",
+            "default": "'queued'"
+          },
+          "current_stage": {
+            "type": "text"
+          },
+          "script_snapshot": {
+            "type": "jsonb"
+          },
+          "provider": {
+            "type": "text"
+          },
+          "provider_job_id": {
+            "type": "text"
+          },
+          "output_asset_id": {
+            "type": "uuid"
+          },
+          "error": {
+            "type": "jsonb"
+          },
+          "started_at": {
+            "type": "timestamptz"
+          },
+          "finished_at": {
+            "type": "timestamptz"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "updated_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "external_video_tasks": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "generation_job_id": {
+            "type": "uuid"
+          },
+          "provider": {
+            "type": "text",
+            "default": "'byteplus'"
+          },
+          "external_task_id": {
+            "type": "text",
+            "nullable": false
+          },
+          "status": {
+            "type": "text"
+          },
+          "request_payload": {
+            "type": "jsonb"
+          },
+          "response_payload": {
+            "type": "jsonb"
+          },
+          "video_url": {
+            "type": "text"
+          },
+          "last_frame_url": {
+            "type": "text"
+          },
+          "url_expires_at": {
+            "type": "timestamptz"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          },
+          "updated_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      },
+      "audio_transcriptions": {
+        "columns": {
+          "id": {
+            "type": "uuid",
+            "default": "gen_random_uuid()"
+          },
+          "project_id": {
+            "type": "uuid",
+            "nullable": false
+          },
+          "source_asset_id": {
+            "type": "uuid"
+          },
+          "output_asset_id": {
+            "type": "uuid"
+          },
+          "provider": {
+            "type": "text",
+            "default": "'openai'"
+          },
+          "model": {
+            "type": "text",
+            "nullable": false
+          },
+          "language": {
+            "type": "text"
+          },
+          "srt_text": {
+            "type": "text"
+          },
+          "raw_response": {
+            "type": "text"
+          },
+          "created_at": {
+            "type": "timestamptz",
+            "default": "now()"
+          }
+        }
+      }
+    }
+  }
+}
