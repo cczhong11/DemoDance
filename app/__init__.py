@@ -7,6 +7,7 @@ from app.config import load_config
 from app.routes.audio import audio_bp
 from app.routes.health import health_bp
 from app.routes.text import text_bp
+from app.routes.video import video_bp
 
 
 def create_app() -> Flask:
@@ -18,5 +19,6 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(text_bp)
     app.register_blueprint(audio_bp)
+    app.register_blueprint(video_bp)
 
     return app
