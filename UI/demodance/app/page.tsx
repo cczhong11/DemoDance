@@ -1473,39 +1473,7 @@ export default function Home() {
         <div className="text-xs text-zinc-500">
           {isEn ? `${overallFilled} / ${steps.length} steps complete` : `${overallFilled} / ${steps.length} 步完成`}
         </div>
-        <button
-          onClick={previewStoryPrompt}
-          disabled={loadingStoryPrompt}
-          className={`text-xs px-3 py-1.5 rounded border ${
-            loadingStoryPrompt
-              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
-              : "border-zinc-300 hover:bg-zinc-100"
-          }`}
-        >
-          {loadingStoryPrompt ? tr("Building...", "生成中…") : tr("Preview Script", "预览脚本")}
-        </button>
-        <button
-          onClick={previewVoicePrompt}
-          disabled={loadingVoicePrompt}
-          className={`text-xs px-3 py-1.5 rounded border ${
-            loadingVoicePrompt
-              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
-              : "border-zinc-300 hover:bg-zinc-100"
-          }`}
-        >
-          {loadingVoicePrompt ? tr("Building...", "生成中…") : tr("Preview Voice", "预览配音")}
-        </button>
-        <button
-          onClick={previewScenePrompt}
-          disabled={loadingScenePrompt}
-          className={`text-xs px-3 py-1.5 rounded border ${
-            loadingScenePrompt
-              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
-              : "border-zinc-300 hover:bg-zinc-100"
-          }`}
-        >
-          {loadingScenePrompt ? tr("Building...", "生成中…") : tr("Preview Scene", "预览分镜")}
-        </button>
+
         <button
           disabled={!allDone}
           onClick={scrollToRenderPanel}
@@ -1517,12 +1485,7 @@ export default function Home() {
         >
           {tr("Go to Generate", "去底部生成")}
         </button>
-        <a
-          href="/section-video"
-          className="text-xs px-3 py-1.5 rounded font-medium bg-emerald-600 text-white hover:bg-emerald-700"
-        >
-          {tr("Next: Section Page", "下一步：分段生成页")}
-        </a>
+
       </header>
 
       {/* ===== Body ===== */}
