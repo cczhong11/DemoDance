@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DemoDance (Next.js + API Routes)
 
-## Getting Started
+Frontend and backend are both in Next.js. API routes run on the Node.js runtime in this app.
 
-First, run the development server:
+## Setup
 
 ```bash
+cd UI/demodance
+cp .env.local.example .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## API Endpoints
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `GET /api/health`
+- `POST /api/text/chat`
+- `POST /api/audio/speech`
+- `POST /api/video/tasks`
+- `GET /api/video/tasks/:taskId`
+- `GET /api/video/tasks`
 
-## Learn More
+## Examples
 
-To learn more about Next.js, take a look at the following resources:
+### Text chat
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+curl -X POST http://localhost:3000/api/text/chat \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Reply with exactly: pong"}'
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Audio speech (base64)
 
-## Deploy on Vercel
+```bash
+curl -X POST http://localhost:3000/api/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Welcome to DemoDance","base64":true}'
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Create video task
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+curl -X POST http://localhost:3000/api/video/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt":"meta engineer write code",
+    "resolution":"720p",
+    "ratio":"16:9",
+    "duration":5,
+    "generate_audio":true
+  }'
+```
+
+### Get video task status
+
+```bash
+curl -X GET http://localhost:3000/api/video/tasks/cgt-2026xxxx
+```
+
+### List video tasks
+
+```bash
+curl -X GET "http://localhost:3000/api/video/tasks?page_num=1&page_size=3&filter.status=succeeded&filter.task_ids=id1&filter.task_ids=id2"
+```
+
+## Notes
+
+- BytePlus list filters supported: `page_num`, `page_size`, `status`/`filter.status`, `model`/`filter.model`, `service_tier`/`filter.service_tier`, `task_ids`/`filter.task_ids`.
+- `task_ids` supports repeated query params and comma-separated input.
