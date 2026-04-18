@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect } from "react";
+import { useLocale } from "./locale-provider";
 
 type StepId = "audience" | "importance" | "product" | "features" | "tech" | "impact";
 
@@ -35,76 +36,106 @@ type ChatMsg = {
   tag?: string;
 };
 
-const INITIAL_STEPS: Step[] = [
-  {
-    id: "audience",
-    index: 1,
-    title: "目标用户 & 问题",
-    subtitle: "说清楚 demo 是给谁看的、他们遇到什么问题",
-    fields: [
-      { key: "user", label: "Target User", value: "", placeholder: "例如：独立开发者、Hackathon 选手…" },
-      { key: "problem", label: "Problem", value: "", placeholder: "他们遇到什么困难？" },
-    ],
-  },
-  {
-    id: "importance",
-    index: 2,
-    title: "问题的重要性（联网佐证）",
-    subtitle: "AI 会抓取网络数据支撑这个 problem",
-    fields: [
-      { key: "evidence", label: "Web Evidence", value: "", placeholder: "点右侧 AI「去网上找证据」…" },
-    ],
-  },
-  {
-    id: "product",
-    index: 3,
-    title: "产品亮相",
-    subtitle: "Logo、名字、Slogan —— 三件套",
-    fields: [
-      { key: "logo", label: "Logo", value: "", placeholder: "拖拽上传 / 让 AI 生成" },
-      { key: "name", label: "Product Name", value: "", placeholder: "产品叫什么？" },
-      { key: "slogan", label: "Slogan", value: "", placeholder: "一句话打动人" },
-    ],
-  },
-  {
-    id: "features",
-    index: 4,
-    title: "功能介绍",
-    subtitle: "每条 feature 一小段话，视频会逐条带过",
-    fields: [
-      { key: "feature1", label: "Feature 1", value: "", placeholder: "最核心的那一个先说" },
-      { key: "feature2", label: "Feature 2", value: "", placeholder: "次重要" },
-      { key: "feature3", label: "Feature 3", value: "", placeholder: "可选" },
-    ],
-  },
-  {
-    id: "tech",
-    index: 5,
-    title: "技术说明",
-    subtitle: "向技术观众展示你的 stack",
-    fields: [
-      { key: "stack", label: "Tech Stack", value: "", placeholder: "Next.js · AI SDK · Postgres…" },
-    ],
-  },
-  {
-    id: "impact",
-    index: 6,
-    title: "未来 Impact",
-    subtitle: "这个产品会如何改变世界",
-    fields: [
-      { key: "impact", label: "Future Vision", value: "", placeholder: "一句话收尾，想象空间拉满" },
-    ],
-  },
-];
+function getInitialSteps(locale: "en" | "zh"): Step[] {
+  const isEn = locale === "en";
+  return [
+    {
+      id: "audience",
+      index: 1,
+      title: isEn ? "Target User & Problem" : "目标用户 & 问题",
+      subtitle: isEn ? "Clarify who this demo serves and what pain they have" : "说清楚 demo 是给谁看的、他们遇到什么问题",
+      fields: [
+        {
+          key: "user",
+          label: "Target User",
+          value: "",
+          placeholder: isEn ? "For example: indie devs, hackathon teams..." : "例如：独立开发者、Hackathon 选手…",
+        },
+        {
+          key: "problem",
+          label: "Problem",
+          value: "",
+          placeholder: isEn ? "What is their concrete pain?" : "他们遇到什么困难？",
+        },
+      ],
+    },
+    {
+      id: "importance",
+      index: 2,
+      title: isEn ? "Problem Importance (Web Evidence)" : "问题的重要性（联网佐证）",
+      subtitle: isEn ? "AI gathers online signals to validate the problem" : "AI 会抓取网络数据支撑这个 problem",
+      fields: [
+        {
+          key: "evidence",
+          label: "Web Evidence",
+          value: "",
+          placeholder: isEn ? "Ask AI on the right to search evidence..." : "点右侧 AI「去网上找证据」…",
+        },
+      ],
+    },
+    {
+      id: "product",
+      index: 3,
+      title: isEn ? "Product Reveal" : "产品亮相",
+      subtitle: isEn ? "Logo, name, and slogan — the launch trio" : "Logo、名字、Slogan —— 三件套",
+      fields: [
+        { key: "logo", label: "Logo", value: "", placeholder: isEn ? "Upload or ask AI to generate" : "拖拽上传 / 让 AI 生成" },
+        { key: "name", label: "Product Name", value: "", placeholder: isEn ? "What's the product name?" : "产品叫什么？" },
+        { key: "slogan", label: "Slogan", value: "", placeholder: isEn ? "One line that sticks" : "一句话打动人" },
+      ],
+    },
+    {
+      id: "features",
+      index: 4,
+      title: isEn ? "Features" : "功能介绍",
+      subtitle: isEn ? "One short line per feature for the video sequence" : "每条 feature 一小段话，视频会逐条带过",
+      fields: [
+        { key: "feature1", label: "Feature 1", value: "", placeholder: isEn ? "Start with the strongest one" : "最核心的那一个先说" },
+        { key: "feature2", label: "Feature 2", value: "", placeholder: isEn ? "Second most important" : "次重要" },
+        { key: "feature3", label: "Feature 3", value: "", placeholder: isEn ? "Optional" : "可选" },
+      ],
+    },
+    {
+      id: "tech",
+      index: 5,
+      title: isEn ? "Tech Stack" : "技术说明",
+      subtitle: isEn ? "Show the stack clearly for technical audience" : "向技术观众展示你的 stack",
+      fields: [
+        { key: "stack", label: "Tech Stack", value: "", placeholder: "Next.js · AI SDK · Postgres…" },
+      ],
+    },
+    {
+      id: "impact",
+      index: 6,
+      title: isEn ? "Future Impact" : "未来 Impact",
+      subtitle: isEn ? "How this product can change the world" : "这个产品会如何改变世界",
+      fields: [
+        { key: "impact", label: "Future Vision", value: "", placeholder: isEn ? "Close with one memorable line" : "一句话收尾，想象空间拉满" },
+      ],
+    },
+  ];
+}
 
-const INITIAL_CHAT: ChatMsg[] = [
-  {
-    role: "ai",
-    text: "嗨！我是 DemoDance ✨\n我会帮你把 demo 素材自动包装成一条 launch 视频。我们按左边 6 步来 —— 先说说你的 demo 是给谁看的？他们遇到了什么问题？",
-  },
-];
+function getInitialChat(locale: "en" | "zh"): ChatMsg[] {
+  if (locale === "en") {
+    return [
+      {
+        role: "ai",
+        text: "Hi! I'm DemoDance ✨\nI'll help turn your raw demo into a launch video. Let's start from step 1: who is this for, and what problem do they face?",
+      },
+    ];
+  }
+
+  return [
+    {
+      role: "ai",
+      text: "嗨！我是 DemoDance ✨\n我会帮你把 demo 素材自动包装成一条 launch 视频。我们按左边 6 步来 —— 先说说你的 demo 是给谁看的？他们遇到了什么问题？",
+    },
+  ];
+}
 
 export default function Home() {
+  const { locale, setLocale, tr } = useLocale();
   const [stage, setStage] = useState<"onboard" | "workflow">("onboard");
   const [submission, setSubmission] = useState("");
   const [demoVideo, setDemoVideo] = useState<{ name: string; size: number; url?: string } | null>(null);
@@ -112,15 +143,52 @@ export default function Home() {
   const [previewSegment, setPreviewSegment] = useState<FeatureSegment | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
 
-  const [steps, setSteps] = useState<Step[]>(INITIAL_STEPS);
+  const [steps, setSteps] = useState<Step[]>(() => getInitialSteps("en"));
   const [activeStepId, setActiveStepId] = useState<StepId>("audience");
-  const [chat, setChat] = useState<ChatMsg[]>(INITIAL_CHAT);
+  const [chat, setChat] = useState<ChatMsg[]>(() => getInitialChat("en"));
   const [input, setInput] = useState("");
   const [projectName, setProjectName] = useState("MyHackathonDemo");
   const [generating, setGenerating] = useState<null | {
     stage: number;
     done: boolean;
   }>(null);
+  const [storyPromptPreview, setStoryPromptPreview] = useState<string | null>(null);
+  const [storyPromptSources, setStoryPromptSources] = useState<string[]>([]);
+  const [loadingStoryPrompt, setLoadingStoryPrompt] = useState(false);
+  const [storyPromptError, setStoryPromptError] = useState<string | null>(null);
+  const [voicePromptPreview, setVoicePromptPreview] = useState<string | null>(null);
+  const [voicePromptSources, setVoicePromptSources] = useState<string[]>([]);
+  const [loadingVoicePrompt, setLoadingVoicePrompt] = useState(false);
+  const [voicePromptError, setVoicePromptError] = useState<string | null>(null);
+  const [scenePromptPreview, setScenePromptPreview] = useState<string | null>(null);
+  const [scenePromptSources, setScenePromptSources] = useState<string[]>([]);
+  const [loadingScenePrompt, setLoadingScenePrompt] = useState(false);
+  const [scenePromptError, setScenePromptError] = useState<string | null>(null);
+  const isEn = locale === "en";
+
+  useEffect(() => {
+    const templates = getInitialSteps(locale);
+    setSteps((prev) =>
+      prev.map((step) => {
+        const templateStep = templates.find((s) => s.id === step.id);
+        if (!templateStep) return step;
+        return {
+          ...step,
+          title: templateStep.title,
+          subtitle: templateStep.subtitle,
+          fields: step.fields.map((field) => {
+            const templateField = templateStep.fields.find((f) => f.key === field.key);
+            if (!templateField) return field;
+            return {
+              ...field,
+              label: templateField.label,
+              placeholder: templateField.placeholder,
+            };
+          }),
+        };
+      }),
+    );
+  }, [locale]);
 
   function handleStart() {
     setParsing(true);
@@ -131,26 +199,26 @@ export default function Home() {
         {
           start: 2,
           end: 9,
-          label: "开场 · 问题切入",
+          label: tr("Opening · Problem Setup", "开场 · 问题切入"),
           accent: "#0ea5e9",
           emoji: "🎬",
-          caption: "拖拽素材 → 一键启动 · 省去从 0 搭脚本的时间",
+          caption: tr("Drop in assets and kick off in one click.", "拖拽素材 → 一键启动 · 省去从 0 搭脚本的时间"),
         },
         {
           start: 12,
           end: 22,
-          label: "核心功能演示",
+          label: tr("Core Feature Demo", "核心功能演示"),
           accent: "#f97316",
           emoji: "✨",
-          caption: "AI 自动拆分镜 + 逐条 feature 配旁白",
+          caption: tr("AI breaks scenes and maps voiceover per feature.", "AI 自动拆分镜 + 逐条 feature 配旁白"),
         },
         {
           start: 25,
           end: 34,
-          label: "成品展示 · 导出",
+          label: tr("Final Output · Export", "成品展示 · 导出"),
           accent: "#8b5cf6",
           emoji: "🎞️",
-          caption: "一键合成成品视频，支持 16:9 / 9:16 导出",
+          caption: tr("One-click final render, export 16:9 or 9:16.", "一键合成成品视频，支持 16:9 / 9:16 导出"),
         },
       ];
 
@@ -184,10 +252,16 @@ export default function Home() {
         ...c,
         {
           role: "ai",
-          tag: "已读取提交材料",
+          tag: tr("Submission Parsed", "已读取提交材料"),
           text: demoVideo
-            ? `读完了你提交的说明（${submission.length} 字），也拿到了 demo 视频「${demoVideo.name}」。AI 已从视频里切出 ${mockSegments.length} 段对应的 feature 片段 —— 去 Step 4 看看 👀`
-            : `读完了你提交的说明（${submission.length} 字）。没视频也没关系，我先基于文字生成了 ${mockSegments.length} 段占位分镜，Step 4 里可以看到。`,
+            ? tr(
+                `Read your submission (${submission.length} chars) and loaded demo video "${demoVideo.name}". I cut ${mockSegments.length} feature-aligned segments from video. Check Step 4 👀`,
+                `读完了你提交的说明（${submission.length} 字），也拿到了 demo 视频「${demoVideo.name}」。AI 已从视频里切出 ${mockSegments.length} 段对应的 feature 片段 —— 去 Step 4 看看 👀`,
+              )
+            : tr(
+                `Read your submission (${submission.length} chars). No video is fine — I generated ${mockSegments.length} placeholder storyboard segments from text. See Step 4.`,
+                `读完了你提交的说明（${submission.length} 字）。没视频也没关系，我先基于文字生成了 ${mockSegments.length} 段占位分镜，Step 4 里可以看到。`,
+              ),
         },
       ]);
       setParsing(false);
@@ -270,7 +344,7 @@ export default function Home() {
           ...c,
           {
             role: "ai",
-            tag: `已写入 · ${step.title} · ${emptyField.label}`,
+            tag: `${tr("Filled", "已写入")} · ${step.title} · ${emptyField.label}`,
             text: buildAiReply(step.id, emptyField.key),
           },
         ]);
@@ -288,7 +362,7 @@ export default function Home() {
           ...c,
           {
             role: "ai",
-            text: "这一步已经填完了，我们跳到下一步吧 →",
+            text: tr("This step is already complete. Let's move to the next one →", "这一步已经填完了，我们跳到下一步吧 →"),
           },
         ]);
       }
@@ -299,20 +373,20 @@ export default function Home() {
     switch (stepId) {
       case "audience":
         return fieldKey === "user"
-          ? "👍 用户画像记下了。那他们具体遇到什么 pain point？"
-          : "问题清楚了。接下来我去联网找几条数据支撑这个 problem，稍等…";
+          ? tr("👍 Got the user persona. What exact pain point do they face?", "👍 用户画像记下了。那他们具体遇到什么 pain point？")
+          : tr("Great, problem is clear. Next I'll gather web evidence for it...", "问题清楚了。接下来我去联网找几条数据支撑这个 problem，稍等…");
       case "importance":
-        return "已经抓了 3 条网络数据：ProductHunt · X · HackerNews。要不要看原文？";
+        return tr("Collected 3 web signals: ProductHunt · X · HackerNews. Want source links?", "已经抓了 3 条网络数据：ProductHunt · X · HackerNews。要不要看原文？");
       case "product":
-        if (fieldKey === "name") return "名字不错！Slogan 方向偏「工具感」还是「情绪感」？";
-        if (fieldKey === "slogan") return "Slogan 收到。下一步聊 feature ✨";
-        return "Logo 已接收。";
+        if (fieldKey === "name") return tr("Nice name! Should slogan be functional or emotional?", "名字不错！Slogan 方向偏「工具感」还是「情绪感」？");
+        if (fieldKey === "slogan") return tr("Slogan received. Next, let's craft features ✨", "Slogan 收到。下一步聊 feature ✨");
+        return tr("Logo received.", "Logo 已接收。");
       case "features":
-        return "Feature 记好了。再来一个？视频里最多带 3 个最突出。";
+        return tr("Feature saved. Add another? We'll keep up to 3 strongest in the video.", "Feature 记好了。再来一个？视频里最多带 3 个最突出。");
       case "tech":
-        return "Tech stack ✓。最后一步：聊聊 impact。";
+        return tr("Tech stack ✓. Final step: impact.", "Tech stack ✓。最后一步：聊聊 impact。");
       case "impact":
-        return "收尾漂亮！👉 右上角点「生成视频」就可以渲染了。";
+        return tr("Great closing line! 👉 Click “Generate Video” at top-right.", "收尾漂亮！👉 右上角点「生成视频」就可以渲染了。");
     }
   }
 
@@ -320,28 +394,33 @@ export default function Home() {
     setActiveStepId(stepId);
     const suggestions: Record<StepId, Record<string, string>> = {
       audience: {
-        user: "独立开发者、Hackathon 选手、小型产品团队",
-        problem: "能做出产品，但没时间/技能做出专业的 launch 视频",
+        user: tr("Indie developers, hackathon participants, small product teams", "独立开发者、Hackathon 选手、小型产品团队"),
+        problem: tr("Can build products but lack time/skills to produce professional launch videos", "能做出产品，但没时间/技能做出专业的 launch 视频"),
       },
       importance: {
-        evidence:
+        evidence: tr(
+          "• ProductHunt: 72% of top launches include video on day one\n• X: posts with launch video get 3.8× more engagement\n• YC: investors often only watch the first 30 seconds",
           "• ProductHunt：72% 上榜产品在 launch 当天有视频\n• X：带视频的新品发帖平均多 3.8× engagement\n• YC：投资人平均只看 demo 视频前 30 秒",
+        ),
       },
       product: {
-        logo: "（AI 已根据你的产品名生成候选 Logo）",
+        logo: tr("(AI generated logo candidates from your product name)", "（AI 已根据你的产品名生成候选 Logo）"),
         name: "DemoDance",
         slogan: "From raw demo to launch-ready in 60 seconds.",
       },
       features: {
-        feature1: "脚本自动生成：按经典 launch 视频模板分段撰写",
-        feature2: "联网取证：自动抓网络数据支撑 problem statement",
-        feature3: "素材一键合成：Logo / 名字 / demo 录屏 → 成品视频",
+        feature1: tr("Auto script generation: structured by launch-video template", "脚本自动生成：按经典 launch 视频模板分段撰写"),
+        feature2: tr("Web evidence retrieval: validates your problem statement", "联网取证：自动抓网络数据支撑 problem statement"),
+        feature3: tr("One-click asset composition: logo/name/demo capture to final video", "素材一键合成：Logo / 名字 / demo 录屏 → 成品视频"),
       },
       tech: {
         stack: "Next.js 16 · Vercel AI SDK · Remotion · FAL · Postgres",
       },
       impact: {
-        impact: "让每一个在车库里 ship 产品的人，都能像大厂一样体面地 launch。",
+        impact: tr(
+          "Help every builder launch with the polish of a large company.",
+          "让每一个在车库里 ship 产品的人，都能像大厂一样体面地 launch。",
+        ),
       },
     };
     const patch = suggestions[stepId];
@@ -359,8 +438,11 @@ export default function Home() {
       ...c,
       {
         role: "ai",
-        tag: `AI 建议 · ${INITIAL_STEPS.find((s) => s.id === stepId)?.title}`,
-        text: "我按常见模板帮你把这一步填了，可以直接编辑不满意的地方。",
+        tag: `${tr("AI Suggestion", "AI 建议")} · ${steps.find((s) => s.id === stepId)?.title}`,
+        text: tr(
+          "I filled this step based on a common launch template. Feel free to edit anything.",
+          "我按常见模板帮你把这一步填了，可以直接编辑不满意的地方。",
+        ),
       },
     ]);
   }
@@ -380,6 +462,169 @@ export default function Home() {
     }, 800);
   }
 
+  function getFieldValue(stepId: StepId, fieldKey: string): string {
+    return steps.find((s) => s.id === stepId)?.fields.find((f) => f.key === fieldKey)?.value ?? "";
+  }
+
+  async function previewStoryPrompt() {
+    setLoadingStoryPrompt(true);
+    setStoryPromptError(null);
+
+    try {
+      const response = await fetch("/api/story/prompt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          includeTechnicalArchitecture: getFieldValue("tech", "stack").trim().length > 0,
+          user: getFieldValue("audience", "user"),
+          problem: getFieldValue("audience", "problem"),
+          evidence: getFieldValue("importance", "evidence"),
+          productName: getFieldValue("product", "name"),
+          slogan: getFieldValue("product", "slogan"),
+          features: [
+            getFieldValue("features", "feature1"),
+            getFieldValue("features", "feature2"),
+            getFieldValue("features", "feature3"),
+          ],
+          techStack: getFieldValue("tech", "stack"),
+          vision: getFieldValue("impact", "impact"),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Failed to build story prompt");
+      }
+
+      const prompt = typeof data.prompt === "string" ? data.prompt : "";
+      const parts = Array.isArray(data.parts)
+        ? (data.parts as Array<{ file?: unknown; title?: unknown }>)
+            .map((part) =>
+              typeof part.file === "string" && typeof part.title === "string"
+                ? `${part.file} · ${part.title}`
+                : null,
+            )
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      setStoryPromptPreview(prompt);
+      setStoryPromptSources(parts);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setStoryPromptError(message);
+    } finally {
+      setLoadingStoryPrompt(false);
+    }
+  }
+
+  async function previewVoicePrompt() {
+    setLoadingVoicePrompt(true);
+    setVoicePromptError(null);
+
+    try {
+      const response = await fetch("/api/voice/prompt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          includeTechnicalArchitecture: getFieldValue("tech", "stack").trim().length > 0,
+          targetUser: getFieldValue("audience", "user"),
+          problem: getFieldValue("audience", "problem"),
+          evidence: getFieldValue("importance", "evidence"),
+          productName: getFieldValue("product", "name"),
+          slogan: getFieldValue("product", "slogan"),
+          features: [
+            getFieldValue("features", "feature1"),
+            getFieldValue("features", "feature2"),
+            getFieldValue("features", "feature3"),
+          ],
+          techStack: getFieldValue("tech", "stack"),
+          vision: getFieldValue("impact", "impact"),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Failed to build voice prompt");
+      }
+
+      const prompt = typeof data.prompt === "string" ? data.prompt : "";
+      const parts = Array.isArray(data.parts)
+        ? (data.parts as Array<{ file?: unknown; title?: unknown }>)
+            .map((part) =>
+              typeof part.file === "string" && typeof part.title === "string"
+                ? `${part.file} · ${part.title}`
+                : null,
+            )
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      setVoicePromptPreview(prompt);
+      setVoicePromptSources(parts);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setVoicePromptError(message);
+    } finally {
+      setLoadingVoicePrompt(false);
+    }
+  }
+
+  async function previewScenePrompt() {
+    setLoadingScenePrompt(true);
+    setScenePromptError(null);
+
+    try {
+      const response = await fetch("/api/scene/prompt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          targetUser: getFieldValue("audience", "user"),
+          problem: getFieldValue("audience", "problem"),
+          evidence: getFieldValue("importance", "evidence"),
+          productName: getFieldValue("product", "name"),
+          slogan: getFieldValue("product", "slogan"),
+          features: [
+            getFieldValue("features", "feature1"),
+            getFieldValue("features", "feature2"),
+            getFieldValue("features", "feature3"),
+          ],
+          techStack: getFieldValue("tech", "stack"),
+          vision: getFieldValue("impact", "impact"),
+          deviceFrame: "desktop",
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Failed to build scene prompt");
+      }
+
+      const prompt = typeof data.prompt === "string" ? data.prompt : "";
+      const parts = Array.isArray(data.parts)
+        ? (data.parts as Array<{ file?: unknown; title?: unknown }>)
+            .map((part) =>
+              typeof part.file === "string" && typeof part.title === "string"
+                ? `${part.file} · ${part.title}`
+                : null,
+            )
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      setScenePromptPreview(prompt);
+      setScenePromptSources(parts);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setScenePromptError(message);
+    } finally {
+      setLoadingScenePrompt(false);
+    }
+  }
+
   const allDone = progress.every((p) => p.status === "done");
 
   if (stage === "onboard") {
@@ -391,6 +636,21 @@ export default function Home() {
             🎬 <span className="ml-1">DemoDance</span>
           </div>
           <div className="ml-2 text-xs text-zinc-400">From raw demo to launch-ready</div>
+          <div className="flex-1" />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setLocale("en")}
+              className={`text-xs px-2 py-1 rounded ${locale === "en" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLocale("zh")}
+              className={`text-xs px-2 py-1 rounded ${locale === "zh" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
+            >
+              中文
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 flex items-center justify-center px-6 py-10">
@@ -400,11 +660,13 @@ export default function Home() {
                 Hackathon Launch Video · AI Generated
               </div>
               <h1 className="text-3xl font-semibold tracking-tight mb-3">
-                把你的 Hackathon 作品，变成一条 launch 视频
+                {tr("Turn your hackathon project into a launch video", "把你的 Hackathon 作品，变成一条 launch 视频")}
               </h1>
               <p className="text-sm text-zinc-600 max-w-lg mx-auto leading-relaxed">
-                贴上你的 Hackathon 提交文字 + 上传原始 demo 录屏，
-                剩下的脚本、分镜、配音、合成 —— 都交给 AI。
+                {tr(
+                  "Paste your submission text and upload raw demo capture. AI handles script, storyboard, voiceover, and rendering.",
+                  "贴上你的 Hackathon 提交文字 + 上传原始 demo 录屏，剩下的脚本、分镜、配音、合成 —— 都交给 AI。",
+                )}
               </p>
             </div>
 
@@ -414,16 +676,19 @@ export default function Home() {
                 <label className="flex items-center justify-between text-sm font-medium mb-2">
                   <span>
                     <span className="text-zinc-400 mr-2">1.</span>
-                    Hackathon 提交说明
+                    {tr("Hackathon Submission", "Hackathon 提交说明")}
                   </span>
                   <span className="text-[11px] text-zinc-400">
-                    {submission.length} 字 · 建议 50+ 字
+                    {isEn ? `${submission.length} chars · recommended 50+` : `${submission.length} 字 · 建议 50+ 字`}
                   </span>
                 </label>
                 <textarea
                   value={submission}
                   onChange={(e) => setSubmission(e.target.value)}
-                  placeholder="贴上你在 Hackathon 提交页填的说明：产品做什么、解决什么问题、为谁做、用到什么技术… AI 会帮你拆成脚本。"
+                  placeholder={tr(
+                    "Paste what you wrote in your hackathon submission: what it does, what problem it solves, who it's for, and stack used. AI will turn it into script blocks.",
+                    "贴上你在 Hackathon 提交页填的说明：产品做什么、解决什么问题、为谁做、用到什么技术… AI 会帮你拆成脚本。",
+                  )}
                   rows={6}
                   className="w-full text-[13px] leading-relaxed border border-zinc-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-zinc-500 resize-none placeholder:text-zinc-400"
                 />
@@ -434,9 +699,9 @@ export default function Home() {
                 <label className="flex items-center justify-between text-sm font-medium mb-2">
                   <span>
                     <span className="text-zinc-400 mr-2">2.</span>
-                    原始 Demo 视频
+                    {tr("Raw Demo Video", "原始 Demo 视频")}
                   </span>
-                  <span className="text-[11px] text-zinc-400">可选 · mp4 / mov</span>
+                  <span className="text-[11px] text-zinc-400">{tr("Optional · mp4 / mov", "可选 · mp4 / mov")}</span>
                 </label>
                 <label
                   htmlFor="demo-video"
@@ -450,15 +715,17 @@ export default function Home() {
                     <div className="text-sm">
                       <div className="font-medium text-zinc-900">🎞️ {demoVideo.name}</div>
                       <div className="text-xs text-zinc-500 mt-1">
-                        {(demoVideo.size / (1024 * 1024)).toFixed(1)} MB · 点击替换
+                        {isEn
+                          ? `${(demoVideo.size / (1024 * 1024)).toFixed(1)} MB · click to replace`
+                          : `${(demoVideo.size / (1024 * 1024)).toFixed(1)} MB · 点击替换`}
                       </div>
                     </div>
                   ) : (
                     <div className="text-sm text-zinc-500">
                       <div className="text-2xl mb-2">📁</div>
-                      点击或拖拽上传你的 demo 录屏
+                      {tr("Click or drag to upload demo capture", "点击或拖拽上传你的 demo 录屏")}
                       <div className="text-[11px] text-zinc-400 mt-1">
-                        没有视频也可以跳过 —— AI 会基于文字生成占位分镜
+                        {tr("No video? Skip it — AI can generate placeholder storyboard from text.", "没有视频也可以跳过 —— AI 会基于文字生成占位分镜")}
                       </div>
                     </div>
                   )}
@@ -489,19 +756,24 @@ export default function Home() {
                       : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
                   }`}
                 >
-                  {parsing ? "AI 正在读取素材…" : "✨ 让 AI 帮我起草脚本"}
+                  {parsing
+                    ? tr("AI is parsing your materials...", "AI 正在读取素材…")
+                    : tr("✨ Let AI draft the script", "✨ 让 AI 帮我起草脚本")}
                 </button>
                 <button
                   onClick={() => setStage("workflow")}
                   className="h-11 px-4 rounded-lg text-sm text-zinc-500 hover:text-zinc-800"
                 >
-                  跳过，手动填
+                  {tr("Skip, fill manually", "跳过，手动填")}
                 </button>
               </div>
             </div>
 
             <div className="mt-5 text-center text-[11px] text-zinc-400">
-              接下来你会看到一个 6 步工作流 · 每一步都可以和 AI 聊着填
+              {tr(
+                "Next you'll enter a 6-step workflow — each step can be completed by chatting with AI.",
+                "接下来你会看到一个 6 步工作流 · 每一步都可以和 AI 聊着填",
+              )}
             </div>
           </div>
         </main>
@@ -516,12 +788,12 @@ export default function Home() {
         <button
           onClick={() => setStage("onboard")}
           className="text-[15px] font-semibold tracking-tight hover:opacity-70"
-          title="回到起点"
+          title={tr("Back to onboarding", "回到起点")}
         >
           🎬 <span className="ml-1">DemoDance</span>
         </button>
         <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <span>项目</span>
+          <span>{tr("Project", "项目")}</span>
           <input
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
@@ -529,11 +801,55 @@ export default function Home() {
           />
         </div>
         <div className="flex-1" />
-        <div className="text-xs text-zinc-500">
-          {overallFilled} / {steps.length} 步完成
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setLocale("en")}
+            className={`text-xs px-2 py-1 rounded ${locale === "en" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
+          >
+            EN
+          </button>
+          <button
+            onClick={() => setLocale("zh")}
+            className={`text-xs px-2 py-1 rounded ${locale === "zh" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
+          >
+            中文
+          </button>
         </div>
-        <button className="text-xs px-3 py-1.5 rounded border border-zinc-300 hover:bg-zinc-100">
-          预览脚本
+        <div className="text-xs text-zinc-500">
+          {isEn ? `${overallFilled} / ${steps.length} steps complete` : `${overallFilled} / ${steps.length} 步完成`}
+        </div>
+        <button
+          onClick={previewStoryPrompt}
+          disabled={loadingStoryPrompt}
+          className={`text-xs px-3 py-1.5 rounded border ${
+            loadingStoryPrompt
+              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
+              : "border-zinc-300 hover:bg-zinc-100"
+          }`}
+        >
+          {loadingStoryPrompt ? tr("Building...", "生成中…") : tr("Preview Script", "预览脚本")}
+        </button>
+        <button
+          onClick={previewVoicePrompt}
+          disabled={loadingVoicePrompt}
+          className={`text-xs px-3 py-1.5 rounded border ${
+            loadingVoicePrompt
+              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
+              : "border-zinc-300 hover:bg-zinc-100"
+          }`}
+        >
+          {loadingVoicePrompt ? tr("Building...", "生成中…") : tr("Preview Voice", "预览配音")}
+        </button>
+        <button
+          onClick={previewScenePrompt}
+          disabled={loadingScenePrompt}
+          className={`text-xs px-3 py-1.5 rounded border ${
+            loadingScenePrompt
+              ? "border-zinc-200 text-zinc-400 cursor-not-allowed"
+              : "border-zinc-300 hover:bg-zinc-100"
+          }`}
+        >
+          {loadingScenePrompt ? tr("Building...", "生成中…") : tr("Preview Scene", "预览分镜")}
         </button>
         <button
           disabled={!allDone}
@@ -544,7 +860,7 @@ export default function Home() {
               : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
           }`}
         >
-          ✨ 生成视频
+          {tr("✨ Generate Video", "✨ 生成视频")}
         </button>
       </header>
 
@@ -557,7 +873,7 @@ export default function Home() {
               <h2 className="text-[11px] uppercase tracking-widest text-zinc-500">
                 Video Script Workflow · 6 Steps
               </h2>
-              <span className="text-[11px] text-zinc-400">点击任一步可激活</span>
+              <span className="text-[11px] text-zinc-400">{tr("Click any step to activate", "点击任一步可激活")}</span>
             </div>
 
             <div className="flex gap-1 mb-6">
@@ -615,9 +931,9 @@ export default function Home() {
                         }`}
                       >
                         {prog.status === "done"
-                          ? "已完成"
+                          ? tr("Done", "已完成")
                           : isActive
-                            ? "进行中"
+                            ? tr("Active", "进行中")
                             : `${prog.filled}/${prog.total}`}
                       </span>
                     </div>
@@ -651,7 +967,7 @@ export default function Home() {
                                 style={{
                                   background: `linear-gradient(135deg, ${f.segment.accent} 0%, rgba(0,0,0,0.85) 100%)`,
                                 }}
-                                title="播放该片段"
+                                title={tr("Play this segment", "播放该片段")}
                               >
                                 <div className="absolute inset-0 flex items-center justify-center text-xl">
                                   {f.segment.emoji}
@@ -688,7 +1004,10 @@ export default function Home() {
                         <div className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1">
                           <span>🎞️</span>
                           <span>
-                            AI 已从 demo 视频自动切出 {s.fields.filter((f) => f.segment).length} 段对应片段 · 点缩略图预览
+                            {tr(
+                              `AI auto-cut ${s.fields.filter((f) => f.segment).length} matched segments from demo video. Click thumbnails to preview.`,
+                              `AI 已从 demo 视频自动切出 ${s.fields.filter((f) => f.segment).length} 段对应片段 · 点缩略图预览`,
+                            )}
                           </span>
                         </div>
                       )}
@@ -702,7 +1021,7 @@ export default function Home() {
                         }}
                         className="text-[11px] px-2.5 py-1 bg-white border border-zinc-200 rounded hover:bg-zinc-50"
                       >
-                        ✨ 让 AI 建议
+                        {tr("✨ AI Suggest", "✨ 让 AI 建议")}
                       </button>
                       <button
                         onClick={(e) => {
@@ -711,7 +1030,7 @@ export default function Home() {
                         }}
                         className="text-[11px] px-2.5 py-1 bg-white border border-zinc-200 rounded hover:bg-zinc-50"
                       >
-                        💬 在右侧聊
+                        {tr("💬 Chat on right", "💬 在右侧聊")}
                       </button>
                     </div>
                   </div>
@@ -726,9 +1045,9 @@ export default function Home() {
         {/* RIGHT: chat */}
         <aside className="bg-white border-l border-zinc-200 flex flex-col">
           <div className="px-5 py-3 border-b border-zinc-200">
-            <h3 className="text-sm font-semibold">💬 和 AI 一起写脚本</h3>
+            <h3 className="text-sm font-semibold">{tr("💬 Write Script with AI", "💬 和 AI 一起写脚本")}</h3>
             <p className="text-xs text-zinc-500 mt-0.5">
-              正在填：
+              {tr("Current step:", "正在填：")}
               <span className="text-zinc-800 font-medium">
                 {steps.find((s) => s.id === activeStepId)?.title}
               </span>
@@ -767,19 +1086,22 @@ export default function Home() {
                     sendMessage();
                   }
                 }}
-                placeholder="和 AI 聊聊，或直接写内容（Enter 发送 · Shift+Enter 换行）"
+                placeholder={tr(
+                  "Chat with AI or type content directly (Enter to send · Shift+Enter newline)",
+                  "和 AI 聊聊，或直接写内容（Enter 发送 · Shift+Enter 换行）",
+                )}
                 rows={2}
                 className="w-full text-[13px] resize-none focus:outline-none placeholder:text-zinc-400"
               />
               <div className="flex items-center gap-1.5 mt-1">
                 <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
-                  📎 素材
+                  {tr("📎 Assets", "📎 素材")}
                 </button>
                 <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
                   🎨 Logo
                 </button>
                 <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
-                  🔗 链接
+                  {tr("🔗 Links", "🔗 链接")}
                 </button>
                 <div className="flex-1" />
                 <button
@@ -808,7 +1130,7 @@ export default function Home() {
               <div>
                 <div className="text-sm font-semibold">{previewSegment.label}</div>
                 <div className="text-[11px] text-zinc-500 tabular-nums">
-                  {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)} · 来自原始 demo
+                  {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)} · {tr("from raw demo", "来自原始 demo")}
                 </div>
               </div>
               <button
@@ -835,7 +1157,7 @@ export default function Home() {
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                   <div className="text-5xl mb-2">{previewSegment.emoji}</div>
-                  <div className="text-xs opacity-80">没上传 demo 视频 · 显示占位分镜</div>
+                  <div className="text-xs opacity-80">{tr("No demo uploaded · showing placeholder storyboard", "没上传 demo 视频 · 显示占位分镜")}</div>
                   <div className="mt-3 text-[11px] bg-white/20 px-2 py-0.5 rounded-full tabular-nums">
                     ▶ {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)}
                   </div>
@@ -850,22 +1172,141 @@ export default function Home() {
         </div>
       )}
 
+      {/* ===== Story prompt preview modal ===== */}
+      {storyPromptPreview && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
+          onClick={() => setStoryPromptPreview(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="text-sm font-semibold">Story Prompt Preview</div>
+                <div className="text-[11px] text-zinc-500 mt-1">
+                  Split sub-prompts used:
+                  {storyPromptSources.length > 0 ? ` ${storyPromptSources.join(" | ")}` : " (none)"}
+                </div>
+              </div>
+              <button
+                onClick={() => setStoryPromptPreview(null)}
+                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <pre className="flex-1 overflow-auto text-[12px] leading-relaxed bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap">
+              {storyPromptPreview}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {storyPromptError && (
+        <div className="fixed bottom-4 right-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow">
+          Story prompt error: {storyPromptError}
+        </div>
+      )}
+
+      {/* ===== Voice prompt preview modal ===== */}
+      {voicePromptPreview && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
+          onClick={() => setVoicePromptPreview(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="text-sm font-semibold">Voice Prompt Preview</div>
+                <div className="text-[11px] text-zinc-500 mt-1">
+                  Split sub-prompts used:
+                  {voicePromptSources.length > 0 ? ` ${voicePromptSources.join(" | ")}` : " (none)"}
+                </div>
+              </div>
+              <button
+                onClick={() => setVoicePromptPreview(null)}
+                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <pre className="flex-1 overflow-auto text-[12px] leading-relaxed bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap">
+              {voicePromptPreview}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {voicePromptError && (
+        <div className="fixed bottom-4 left-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow">
+          Voice prompt error: {voicePromptError}
+        </div>
+      )}
+
+      {/* ===== Scene prompt preview modal ===== */}
+      {scenePromptPreview && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
+          onClick={() => setScenePromptPreview(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="text-sm font-semibold">Scene Prompt Preview</div>
+                <div className="text-[11px] text-zinc-500 mt-1">
+                  Split sub-prompts used:
+                  {scenePromptSources.length > 0 ? ` ${scenePromptSources.join(" | ")}` : " (none)"}
+                </div>
+              </div>
+              <button
+                onClick={() => setScenePromptPreview(null)}
+                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <pre className="flex-1 overflow-auto text-[12px] leading-relaxed bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap">
+              {scenePromptPreview}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {scenePromptError && (
+        <div className="fixed bottom-20 left-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow">
+          Scene prompt error: {scenePromptError}
+        </div>
+      )}
+
       {/* ===== Generating overlay ===== */}
       {generating && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-8 w-[420px] shadow-xl">
             <div className="text-lg font-semibold mb-1">
-              {generating.done ? "🎉 视频生成完成" : "✨ 正在合成你的 launch 视频…"}
+              {generating.done ? tr("🎉 Video generation complete", "🎉 视频生成完成") : tr("✨ Generating your launch video...", "✨ 正在合成你的 launch 视频…")}
             </div>
             <div className="text-xs text-zinc-500 mb-5">
-              {generating.done ? "可以下载、分享，或继续编辑脚本。" : "请稍等，大概 1 分钟。"}
+              {generating.done
+                ? tr("You can download, share, or continue editing the script.", "可以下载、分享，或继续编辑脚本。")
+                : tr("Please wait, around 1 minute.", "请稍等，大概 1 分钟。")}
             </div>
             <div className="flex flex-col gap-2 mb-5">
               {[
-                "撰写脚本分镜",
-                "联网抓取问题佐证",
-                "合成配音 & 字幕",
-                "渲染最终视频",
+                tr("Draft script & storyboard", "撰写脚本分镜"),
+                tr("Fetch web evidence", "联网抓取问题佐证"),
+                tr("Synthesize voice & subtitles", "合成配音 & 字幕"),
+                tr("Render final video", "渲染最终视频"),
               ].map((label, i) => {
                 const stageDone = generating.done || i < generating.stage;
                 const stageActive = !generating.done && i === generating.stage;
@@ -892,11 +1333,11 @@ export default function Home() {
                 onClick={() => setGenerating(null)}
                 className="text-xs px-3 py-1.5 rounded border border-zinc-300 hover:bg-zinc-100"
               >
-                {generating.done ? "关闭" : "后台运行"}
+                {generating.done ? tr("Close", "关闭") : tr("Run in background", "后台运行")}
               </button>
               {generating.done && (
                 <button className="text-xs px-3 py-1.5 rounded bg-black text-white hover:bg-zinc-800">
-                  ⬇ 下载视频
+                  {tr("⬇ Download Video", "⬇ 下载视频")}
                 </button>
               )}
             </div>

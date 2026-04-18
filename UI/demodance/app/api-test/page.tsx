@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { useLocale } from "../locale-provider";
 
 type ApiResult = {
   status: number;
@@ -33,6 +34,7 @@ async function callJsonApi(method: string, url: string, body?: unknown): Promise
 }
 
 export default function ApiTestPage() {
+  const { locale, setLocale, tr } = useLocale();
   const [healthResult, setHealthResult] = useState<ApiResult | null>(null);
   const [textPrompt, setTextPrompt] = useState("Reply with exactly: pong");
   const [textResult, setTextResult] = useState<ApiResult | null>(null);
@@ -381,13 +383,31 @@ export default function ApiTestPage() {
     <main className="min-h-screen bg-zinc-950 text-zinc-100 px-6 py-10">
       <div className="mx-auto max-w-5xl space-y-10">
         <header className="space-y-2">
-          <p className="text-zinc-400 text-sm">DemoDance Backend Tester</p>
-          <h1 className="text-3xl font-semibold tracking-tight">API Test Page</h1>
-          <p className="text-zinc-300">Use this page to verify all Next.js backend APIs without curl.</p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-zinc-400 text-sm">{tr("DemoDance Backend Tester", "DemoDance 后端测试器")}</p>
+              <h1 className="text-3xl font-semibold tracking-tight">{tr("API Test Page", "API 测试页")}</h1>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setLocale("en")}
+                className={`text-xs px-2 py-1 rounded ${locale === "en" ? "bg-zinc-100 text-zinc-900" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLocale("zh")}
+                className={`text-xs px-2 py-1 rounded ${locale === "zh" ? "bg-zinc-100 text-zinc-900" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+              >
+                中文
+              </button>
+            </div>
+          </div>
+          <p className="text-zinc-300">{tr("Use this page to verify all Next.js backend APIs without curl.", "用这个页面直接验证所有 Next.js 后端 API，无需 curl。")}</p>
         </header>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Health</h2>
+          <h2 className="text-xl font-medium">{tr("Health", "健康检查")}</h2>
           <button onClick={testHealth} className="rounded-md bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-4 py-2 font-medium">
             Test GET /api/health
           </button>
@@ -399,7 +419,7 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Text Chat</h2>
+          <h2 className="text-xl font-medium">{tr("Text Chat", "文本对话")}</h2>
           <form onSubmit={testText} className="space-y-3">
             <input
               value={textPrompt}
@@ -418,7 +438,7 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Audio Speech</h2>
+          <h2 className="text-xl font-medium">{tr("Audio Speech", "语音合成")}</h2>
           <form onSubmit={testAudio} className="space-y-3">
             <input
               value={audioInput}
@@ -431,7 +451,7 @@ export default function ApiTestPage() {
                 checked={audioBase64}
                 onChange={(e) => setAudioBase64(e.target.checked)}
               />
-              Request base64 response
+              {tr("Request base64 response", "返回 base64")}
             </label>
             <button type="submit" className="rounded-md bg-fuchsia-500 hover:bg-fuchsia-400 text-zinc-950 px-4 py-2 font-medium">
               Test POST /api/audio/speech
@@ -446,7 +466,7 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Audio to SRT</h2>
+          <h2 className="text-xl font-medium">{tr("Audio to SRT", "音频转 SRT")}</h2>
           <form onSubmit={testAudioToSrt} className="space-y-3">
             <input
               type="file"
@@ -458,7 +478,7 @@ export default function ApiTestPage() {
               value={srtModel}
               onChange={(e) => setSrtModel(e.target.value)}
               className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="STT model (default whisper-1)"
+              placeholder={tr("STT model (default whisper-1)", "STT 模型（默认 whisper-1）")}
             />
             <button type="submit" className="rounded-md bg-violet-500 hover:bg-violet-400 text-zinc-950 px-4 py-2 font-medium">
               Test POST /api/audio/srt
@@ -472,14 +492,14 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Video Create + Status + List</h2>
+          <h2 className="text-xl font-medium">{tr("Video Create + Status + List", "视频创建 + 状态 + 列表")}</h2>
 
           <form onSubmit={createVideoTask} className="space-y-3">
             <input
               value={videoPrompt}
               onChange={(e) => setVideoPrompt(e.target.value)}
               className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="Video prompt"
+              placeholder={tr("Video prompt", "视频提示词")}
             />
             <input
               type="number"
@@ -505,7 +525,7 @@ export default function ApiTestPage() {
               value={taskId}
               onChange={(e) => setTaskId(e.target.value)}
               className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="Task ID (cgt-...)"
+              placeholder={tr("Task ID (cgt-...)", "任务 ID（cgt-...）")}
             />
             <button type="submit" className="rounded-md bg-lime-500 hover:bg-lime-400 text-zinc-950 px-4 py-2 font-medium">
               Test GET /api/video/tasks/:taskId
@@ -514,7 +534,7 @@ export default function ApiTestPage() {
 
           {detectedVideoUrl && (
             <p className="text-sm text-zinc-300">
-              Video URL: <a className="text-sky-300 underline break-all" href={detectedVideoUrl} target="_blank" rel="noreferrer">open</a>
+              {tr("Video URL:", "视频地址：")} <a className="text-sky-300 underline break-all" href={detectedVideoUrl} target="_blank" rel="noreferrer">{tr("open", "打开")}</a>
             </p>
           )}
 
@@ -574,10 +594,10 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Video Understand</h2>
+          <h2 className="text-xl font-medium">{tr("Video Understand", "视频理解")}</h2>
 
           <form onSubmit={uploadVideoFileForUnderstanding} className="space-y-3">
-            <p className="text-sm text-zinc-300">1) Optional: Upload local video file to get a reusable file_id.</p>
+            <p className="text-sm text-zinc-300">{tr("1) Optional: Upload local video file to get a reusable file_id.", "1）可选：上传本地视频获取可复用的 file_id。")}</p>
             <input
               type="file"
               accept="video/*"
@@ -588,7 +608,7 @@ export default function ApiTestPage() {
               value={understandPreprocessFps}
               onChange={(e) => setUnderstandPreprocessFps(e.target.value)}
               className="w-40 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="preprocess_fps (e.g. 0.3)"
+              placeholder={tr("preprocess_fps (e.g. 0.3)", "preprocess_fps（例如 0.3）")}
             />
             <button type="submit" className="rounded-md bg-indigo-500 hover:bg-indigo-400 text-zinc-950 px-4 py-2 font-medium">
               Test POST /api/video/files
@@ -602,9 +622,9 @@ export default function ApiTestPage() {
           )}
 
           <form onSubmit={testVideoUnderstand} className="space-y-3">
-            <p className="text-sm text-zinc-300">2) Run video understanding via Responses API.</p>
+            <p className="text-sm text-zinc-300">{tr("2) Run video understanding via Responses API.", "2）通过 Responses API 执行视频理解。")}</p>
             <label className="text-sm text-zinc-300">
-              input type
+              {tr("input type", "输入类型")}
               <select
                 value={understandInputType}
                 onChange={(e) => setUnderstandInputType(e.target.value as "file_id" | "video_url")}
@@ -628,13 +648,13 @@ export default function ApiTestPage() {
                   value={understandVideoUrl}
                   onChange={(e) => setUnderstandVideoUrl(e.target.value)}
                   className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-                  placeholder="https://...mp4 or data:video/mp4;base64,..."
+                  placeholder={tr("https://...mp4 or data:video/mp4;base64,...", "https://...mp4 或 data:video/mp4;base64,...")}
                 />
                 <input
                   value={understandFps}
                   onChange={(e) => setUnderstandFps(e.target.value)}
                   className="w-40 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-                  placeholder="fps (0.2~5)"
+                  placeholder={tr("fps (0.2~5)", "fps（0.2~5）")}
                 />
               </>
             )}
@@ -643,7 +663,7 @@ export default function ApiTestPage() {
               value={understandPrompt}
               onChange={(e) => setUnderstandPrompt(e.target.value)}
               className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="Understanding prompt"
+              placeholder={tr("Understanding prompt", "理解提示词")}
             />
             <button type="submit" className="rounded-md bg-rose-500 hover:bg-rose-400 text-zinc-950 px-4 py-2 font-medium">
               Test POST /api/video/understand
@@ -658,10 +678,10 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">Image Generation</h2>
+          <h2 className="text-xl font-medium">{tr("Image Generation", "图片生成")}</h2>
           <form onSubmit={testImageGeneration} className="space-y-3">
             <label className="text-sm text-zinc-300">
-              mode
+              {tr("mode", "模式")}
               <select
                 value={imageMode}
                 onChange={(e) => setImageMode(e.target.value as "text" | "image" | "multi")}
@@ -677,7 +697,7 @@ export default function ApiTestPage() {
               value={imagePrompt}
               onChange={(e) => setImagePrompt(e.target.value)}
               className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="Image generation prompt"
+              placeholder={tr("Image generation prompt", "图片生成提示词")}
             />
 
             {imageMode === "image" && (
@@ -685,7 +705,7 @@ export default function ApiTestPage() {
                 value={imageInputUrl}
                 onChange={(e) => setImageInputUrl(e.target.value)}
                 className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-                placeholder="Input image URL or data:image/...;base64,..."
+                placeholder={tr("Input image URL or data:image/...;base64,...", "输入图片 URL 或 data:image/...;base64,...")}
               />
             )}
 
@@ -694,13 +714,13 @@ export default function ApiTestPage() {
                 value={imageInputUrlsText}
                 onChange={(e) => setImageInputUrlsText(e.target.value)}
                 className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-                placeholder="Enter 2+ image URLs/Base64, separated by comma or newline"
+                placeholder={tr("Enter 2+ image URLs/Base64, separated by comma or newline", "输入 2 个以上图片 URL/Base64，用逗号或换行分隔")}
               />
             )}
 
             <div className="flex flex-wrap items-center gap-3">
               <label className="text-sm text-zinc-300">
-                size
+                {tr("size", "尺寸")}
                 <input
                   value={imageSize}
                   onChange={(e) => setImageSize(e.target.value)}
@@ -708,7 +728,7 @@ export default function ApiTestPage() {
                 />
               </label>
               <label className="text-sm text-zinc-300">
-                output_format
+                {tr("output_format", "输出格式")}
                 <input
                   value={imageOutputFormat}
                   onChange={(e) => setImageOutputFormat(e.target.value)}
@@ -716,7 +736,7 @@ export default function ApiTestPage() {
                 />
               </label>
               <label className="text-sm text-zinc-300">
-                response_format
+                {tr("response_format", "返回格式")}
                 <input
                   value={imageResponseFormat}
                   onChange={(e) => setImageResponseFormat(e.target.value)}
@@ -729,7 +749,7 @@ export default function ApiTestPage() {
                   checked={imageWatermark}
                   onChange={(e) => setImageWatermark(e.target.checked)}
                 />
-                watermark
+                {tr("watermark", "水印")}
               </label>
             </div>
 
@@ -746,17 +766,17 @@ export default function ApiTestPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
-          <h2 className="text-xl font-medium">FFmpeg Understand</h2>
+          <h2 className="text-xl font-medium">{tr("FFmpeg Understand", "FFmpeg 视频理解")}</h2>
           <form onSubmit={testFfmpegUnderstand} className="space-y-3">
             <label className="text-sm text-zinc-300">
-              input type
+              {tr("input type", "输入类型")}
               <select
                 value={ffmpegInputType}
                 onChange={(e) => setFfmpegInputType(e.target.value as "video_url" | "file")}
                 className="ml-2 rounded-md bg-zinc-900 border border-zinc-700 px-2 py-1"
               >
-                <option value="video_url">video_url</option>
-                <option value="file">file upload</option>
+                <option value="video_url">{tr("video_url", "视频 URL")}</option>
+                <option value="file">{tr("file upload", "文件上传")}</option>
               </select>
             </label>
 
@@ -765,7 +785,7 @@ export default function ApiTestPage() {
                 value={ffmpegVideoUrl}
                 onChange={(e) => setFfmpegVideoUrl(e.target.value)}
                 className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-                placeholder="https://...mp4"
+                placeholder={tr("https://...mp4", "https://...mp4")}
               />
             ) : (
               <input
@@ -780,12 +800,12 @@ export default function ApiTestPage() {
               value={ffmpegPrompt}
               onChange={(e) => setFfmpegPrompt(e.target.value)}
               className="w-full min-h-24 rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
-              placeholder="Describe key actions and risks per second"
+              placeholder={tr("Describe key actions and risks per second", "按秒描述关键动作与风险")}
             />
 
             <div className="flex flex-wrap items-center gap-3">
               <label className="text-sm text-zinc-300">
-                fps
+                {tr("fps", "fps")}
                 <input
                   value={ffmpegFps}
                   onChange={(e) => setFfmpegFps(e.target.value)}
@@ -793,7 +813,7 @@ export default function ApiTestPage() {
                 />
               </label>
               <label className="text-sm text-zinc-300">
-                batch_size
+                {tr("batch_size", "批大小")}
                 <input
                   value={ffmpegBatchSize}
                   onChange={(e) => setFfmpegBatchSize(e.target.value)}
@@ -801,7 +821,7 @@ export default function ApiTestPage() {
                 />
               </label>
               <label className="text-sm text-zinc-300">
-                model
+                {tr("model", "模型")}
                 <input
                   value={ffmpegModel}
                   onChange={(e) => setFfmpegModel(e.target.value)}
@@ -809,7 +829,7 @@ export default function ApiTestPage() {
                 />
               </label>
               <label className="text-sm text-zinc-300">
-                max_tokens
+                {tr("max_tokens", "最大 tokens")}
                 <input
                   value={ffmpegMaxTokens}
                   onChange={(e) => setFfmpegMaxTokens(e.target.value)}
