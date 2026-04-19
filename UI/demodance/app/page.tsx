@@ -1,160 +1,30 @@
 "use client";
 
 import { useMemo, useRef, useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { OnboardingScreen } from "./home/onboarding-screen";
+import { PromptErrorToast, PromptPreviewModal, SegmentPreviewModal } from "./home/modals";
+import { WorkflowChatSidebar } from "./home/workflow-chat-sidebar";
+import { WorkflowHeader } from "./home/workflow-header";
+import {
+  type ChatMsg,
+  type DemoVideoMeta,
+  type FeatureSegment,
+  type RenderSection,
+  type Step,
+  type StepId,
+  getInitialChat,
+  getInitialSteps,
+} from "./home/types";
 import { useLocale } from "./locale-provider";
 
-type StepId = "audience" | "importance" | "product" | "features" | "tech" | "impact";
-
-type FeatureSegment = {
-  start: number;
-  end: number;
-  label: string;
-  accent: string;
-  emoji: string;
-  caption: string;
-};
-
-type Field = {
-  key: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  segment?: FeatureSegment;
-};
-
-type Step = {
-  id: StepId;
-  index: number;
-  title: string;
-  subtitle: string;
-  fields: Field[];
-};
-
-type ChatMsg = {
-  role: "ai" | "user";
-  text: string;
-  tag?: string;
-};
-
-type RenderStatus = "idle" | "generating" | "done";
-
-type RenderSection = {
-  id: StepId;
-  title: string;
-  status: RenderStatus;
-  durationSec: number;
-  summary: string;
-  version: number;
-  progress?: number;
-  apiState?: string;
-  taskId?: string;
-  videoUrl?: string;
-  rawResponse?: any;
-};
-
-function getInitialSteps(locale: "en" | "zh"): Step[] {
-  const isEn = locale === "en";
-  return [
-    {
-      id: "audience",
-      index: 1,
-      title: isEn ? "Target User & Problem" : "目标用户 & 问题",
-      subtitle: isEn ? "Clarify who this demo serves and what pain they have" : "说清楚 demo 是给谁看的、他们遇到什么问题",
-      fields: [
-        {
-          key: "user",
-          label: "Target User",
-          value: "",
-          placeholder: isEn ? "For example: indie devs, hackathon teams..." : "例如：独立开发者、Hackathon 选手…",
-        },
-        {
-          key: "problem",
-          label: "Problem",
-          value: "",
-          placeholder: isEn ? "What is their concrete pain?" : "他们遇到什么困难？",
-        },
-      ],
-    },
-    {
-      id: "importance",
-      index: 2,
-      title: isEn ? "Problem Importance (Web Evidence)" : "问题的重要性（联网佐证）",
-      subtitle: isEn ? "AI gathers online signals to validate the problem" : "AI 会抓取网络数据支撑这个 problem",
-      fields: [
-        {
-          key: "evidence",
-          label: "Web Evidence",
-          value: "",
-          placeholder: isEn ? "Ask AI on the right to search evidence..." : "点右侧 AI「去网上找证据」…",
-        },
-      ],
-    },
-    {
-      id: "product",
-      index: 3,
-      title: isEn ? "Product Reveal" : "产品亮相",
-      subtitle: isEn ? "Logo, name, and slogan — the launch trio" : "Logo、名字、Slogan —— 三件套",
-      fields: [
-        { key: "logo", label: "Logo", value: "", placeholder: isEn ? "Upload or ask AI to generate" : "拖拽上传 / 让 AI 生成" },
-        { key: "name", label: "Product Name", value: "", placeholder: isEn ? "What's the product name?" : "产品叫什么？" },
-        { key: "slogan", label: "Slogan", value: "", placeholder: isEn ? "One line that sticks" : "一句话打动人" },
-      ],
-    },
-    {
-      id: "features",
-      index: 4,
-      title: isEn ? "Features" : "功能介绍",
-      subtitle: isEn ? "One short line per feature for the video sequence" : "每条 feature 一小段话，视频会逐条带过",
-      fields: [
-        { key: "feature1", label: "Feature 1", value: "", placeholder: isEn ? "Start with the strongest one" : "最核心的那一个先说" },
-        { key: "feature2", label: "Feature 2", value: "", placeholder: isEn ? "Second most important" : "次重要" },
-        { key: "feature3", label: "Feature 3", value: "", placeholder: isEn ? "Optional" : "可选" },
-      ],
-    },
-    {
-      id: "tech",
-      index: 5,
-      title: isEn ? "Tech Stack" : "技术说明",
-      subtitle: isEn ? "Show the stack clearly for technical audience" : "向技术观众展示你的 stack",
-      fields: [
-        { key: "stack", label: "Tech Stack", value: "", placeholder: "Next.js · AI SDK · Postgres…" },
-      ],
-    },
-    {
-      id: "impact",
-      index: 6,
-      title: isEn ? "Future Impact" : "未来 Impact",
-      subtitle: isEn ? "How this product can change the world" : "这个产品会如何改变世界",
-      fields: [
-        { key: "impact", label: "Future Vision", value: "", placeholder: isEn ? "Close with one memorable line" : "一句话收尾，想象空间拉满" },
-      ],
-    },
-  ];
-}
-
-function getInitialChat(locale: "en" | "zh"): ChatMsg[] {
-  if (locale === "en") {
-    return [
-      {
-        role: "ai",
-        text: "Hi! I'm DemoDance ✨\nI'll help turn your raw demo into a launch video. Let's start from step 1: who is this for, and what problem do they face?",
-      },
-    ];
-  }
-
-  return [
-    {
-      role: "ai",
-      text: "嗨！我是 DemoDance ✨\n我会帮你把 demo 素材自动包装成一条 launch 视频。我们按左边 6 步来 —— 先说说你的 demo 是给谁看的？他们遇到了什么问题？",
-    },
-  ];
-}
-
 export default function Home() {
+  const router = useRouter();
+  const pathname = usePathname();
   const { locale, setLocale, tr } = useLocale();
-  const [stage, setStage] = useState<"onboard" | "workflow">("onboard");
+  const [stage, setStage] = useState<"onboard" | "workflow">(pathname === "/workflow" ? "workflow" : "onboard");
   const [submission, setSubmission] = useState("");
-  const [demoVideo, setDemoVideo] = useState<{ name: string; size: number; url?: string } | null>(null);
+  const [demoVideo, setDemoVideo] = useState<DemoVideoMeta | null>(null);
   const [parsing, setParsing] = useState(false);
   const [previewSegment, setPreviewSegment] = useState<FeatureSegment | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -406,6 +276,9 @@ export default function Home() {
 
       setActiveStepId("importance");
       setStage("workflow");
+      if (pathname !== "/workflow") {
+        router.push("/workflow");
+      }
       setChat((c) => [
         ...c,
         {
@@ -436,6 +309,9 @@ export default function Home() {
         },
       ]);
       setStage("workflow");
+      if (pathname !== "/workflow") {
+        router.push("/workflow");
+      }
     } finally {
       setParsing(false);
     }
@@ -1281,212 +1157,67 @@ export default function Home() {
   const allDone = progress.every((p) => p.status === "done");
   const allSectionsDone =
     sectionRenders.length === 5 && sectionRenders.every((section) => section.status === "done");
+  const stepOrder: StepId[] = ["audience", "importance", "product", "features", "tech", "impact"];
+  const activeStepIndex = stepOrder.indexOf(activeStepId);
+  const prevStepId = activeStepIndex > 0 ? stepOrder[activeStepIndex - 1] : null;
+  const nextStepId = activeStepIndex >= 0 && activeStepIndex < stepOrder.length - 1 ? stepOrder[activeStepIndex + 1] : null;
 
   if (stage === "onboard") {
     const canStart = submission.trim().length >= 20 && !parsing;
     return (
-      <div className="flex flex-col min-h-screen bg-gradient-to-br from-zinc-50 via-white to-zinc-100 text-zinc-900">
-        <header className="h-14 flex items-center px-6 border-b border-zinc-200 bg-white/60 backdrop-blur">
-          <div className="text-[15px] font-semibold tracking-tight">
-            🎬 <span className="ml-1">DemoDance</span>
-          </div>
-          <div className="ml-2 text-xs text-zinc-400">From raw demo to launch-ready</div>
-          <div className="flex-1" />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setLocale("en")}
-              className={`text-xs px-2 py-1 rounded ${locale === "en" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
-            >
-              EN
-            </button>
-            <button
-              onClick={() => setLocale("zh")}
-              className={`text-xs px-2 py-1 rounded ${locale === "zh" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
-            >
-              中文
-            </button>
-          </div>
-        </header>
-
-        <main className="flex-1 flex items-center justify-center px-6 py-10">
-          <div className="w-full max-w-2xl">
-            <div className="text-center mb-8">
-              <div className="inline-block text-[11px] uppercase tracking-widest text-zinc-500 bg-zinc-100 px-3 py-1 rounded-full mb-4">
-                Hackathon Launch Video · AI Generated
-              </div>
-              <h1 className="text-3xl font-semibold tracking-tight mb-3">
-                {tr("Turn your hackathon project into a launch video", "把你的 Hackathon 作品，变成一条 launch 视频")}
-              </h1>
-              <p className="text-sm text-zinc-600 max-w-lg mx-auto leading-relaxed">
-                {tr(
-                  "Paste your submission text and upload raw demo capture. AI handles script, storyboard, voiceover, and rendering.",
-                  "贴上你的 Hackathon 提交文字 + 上传原始 demo 录屏，剩下的脚本、分镜、配音、合成 —— 都交给 AI。",
-                )}
-              </p>
-            </div>
-
-            <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-6 flex flex-col gap-5">
-              {/* Submission text */}
-              <div>
-                <label className="flex items-center justify-between text-sm font-medium mb-2">
-                  <span>
-                    <span className="text-zinc-400 mr-2">1.</span>
-                    {tr("Hackathon Submission", "Hackathon 提交说明")}
-                  </span>
-                  <span className="text-[11px] text-zinc-400">
-                    {isEn ? `${submission.length} chars · recommended 50+` : `${submission.length} 字 · 建议 50+ 字`}
-                  </span>
-                </label>
-                <textarea
-                  value={submission}
-                  onChange={(e) => setSubmission(e.target.value)}
-                  placeholder={tr(
-                    "Paste what you wrote in your hackathon submission: what it does, what problem it solves, who it's for, and stack used. AI will turn it into script blocks.",
-                    "贴上你在 Hackathon 提交页填的说明：产品做什么、解决什么问题、为谁做、用到什么技术… AI 会帮你拆成脚本。",
-                  )}
-                  rows={6}
-                  className="w-full text-[13px] leading-relaxed border border-zinc-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-zinc-500 resize-none placeholder:text-zinc-400"
-                />
-              </div>
-
-              {/* Demo video upload */}
-              <div>
-                <label className="flex items-center justify-between text-sm font-medium mb-2">
-                  <span>
-                    <span className="text-zinc-400 mr-2">2.</span>
-                    {tr("Raw Demo Video", "原始 Demo 视频")}
-                  </span>
-                  <span className="text-[11px] text-zinc-400">{tr("Optional · mp4 / mov", "可选 · mp4 / mov")}</span>
-                </label>
-                <label
-                  htmlFor="demo-video"
-                  className={`block border-2 border-dashed rounded-lg px-4 py-6 text-center cursor-pointer transition ${
-                    demoVideo
-                      ? "border-zinc-900 bg-zinc-50"
-                      : "border-zinc-200 hover:border-zinc-400 hover:bg-zinc-50"
-                  }`}
-                >
-                  {demoVideo ? (
-                    <div className="text-sm">
-                      <div className="font-medium text-zinc-900">🎞️ {demoVideo.name}</div>
-                      <div className="text-xs text-zinc-500 mt-1">
-                        {isEn
-                          ? `${(demoVideo.size / (1024 * 1024)).toFixed(1)} MB · click to replace`
-                          : `${(demoVideo.size / (1024 * 1024)).toFixed(1)} MB · 点击替换`}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-zinc-500">
-                      <div className="text-2xl mb-2">📁</div>
-                      {tr("Click or drag to upload demo capture", "点击或拖拽上传你的 demo 录屏")}
-                      <div className="text-[11px] text-zinc-400 mt-1">
-                        {tr("No video? Skip it — AI can generate placeholder storyboard from text.", "没有视频也可以跳过 —— AI 会基于文字生成占位分镜")}
-                      </div>
-                    </div>
-                  )}
-                  <input
-                    id="demo-video"
-                    type="file"
-                    accept="video/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        if (demoVideo?.url) URL.revokeObjectURL(demoVideo.url);
-                        setDemoVideo({ name: f.name, size: f.size, url: URL.createObjectURL(f) });
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-
-              {/* Start button */}
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  disabled={!canStart}
-                  onClick={handleStart}
-                  className={`flex-1 h-11 rounded-lg text-sm font-medium transition ${
-                    canStart
-                      ? "bg-black text-white hover:bg-zinc-800"
-                      : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
-                  }`}
-                >
-                  {parsing
-                    ? tr("AI is parsing your materials...", "AI 正在读取素材…")
-                    : tr("✨ Let AI draft the script", "✨ 让 AI 帮我起草脚本")}
-                </button>
-                <button
-                  onClick={() => setStage("workflow")}
-                  className="h-11 px-4 rounded-lg text-sm text-zinc-500 hover:text-zinc-800"
-                >
-                  {tr("Skip, fill manually", "跳过，手动填")}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 text-center text-[11px] text-zinc-400">
-              {tr(
-                "Next you'll enter a 6-step workflow — each step can be completed by chatting with AI.",
-                "接下来你会看到一个 6 步工作流 · 每一步都可以和 AI 聊着填",
-              )}
-            </div>
-          </div>
-        </main>
-      </div>
+      <OnboardingScreen
+        locale={locale}
+        isEn={isEn}
+        submission={submission}
+        demoVideo={demoVideo}
+        parsing={parsing}
+        canStart={canStart}
+        tr={tr}
+        onLocaleChange={setLocale}
+        onSubmissionChange={setSubmission}
+        onDemoVideoSelect={(file) => {
+          if (demoVideo?.url) URL.revokeObjectURL(demoVideo.url);
+          setDemoVideo({ name: file.name, size: file.size, url: URL.createObjectURL(file) });
+        }}
+        onStart={handleStart}
+        onSkip={() => {
+          setStage("workflow");
+          if (pathname !== "/workflow") {
+            router.push("/workflow");
+          }
+        }}
+      />
     );
   }
 
   return (
     <div className="flex flex-col h-screen bg-zinc-50 text-zinc-900">
-      {/* ===== Top bar ===== */}
-      <header className="h-14 flex items-center gap-4 border-b border-zinc-200 bg-white px-5">
-        <button
-          onClick={() => setStage("onboard")}
-          className="text-[15px] font-semibold tracking-tight hover:opacity-70"
-          title={tr("Back to onboarding", "回到起点")}
-        >
-          🎬 <span className="ml-1">DemoDance</span>
-        </button>
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <span>{tr("Project", "项目")}</span>
-          <input
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            className="border border-dashed border-zinc-300 rounded px-2 py-0.5 text-zinc-700 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setLocale("en")}
-            className={`text-xs px-2 py-1 rounded ${locale === "en" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
-          >
-            EN
-          </button>
-          <button
-            onClick={() => setLocale("zh")}
-            className={`text-xs px-2 py-1 rounded ${locale === "zh" ? "bg-black text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"}`}
-          >
-            中文
-          </button>
-        </div>
-        <div className="text-xs text-zinc-500">
-          {isEn ? `${overallFilled} / ${steps.length} steps complete` : `${overallFilled} / ${steps.length} 步完成`}
-        </div>
-
-        <button
-          disabled={!allDone}
-          onClick={scrollToRenderPanel}
-          className={`text-xs px-4 py-1.5 rounded font-medium ${
-            allDone
-              ? "bg-black text-white hover:bg-zinc-800"
-              : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
-          }`}
-        >
-          {tr("Go to Generate", "去底部生成")}
-        </button>
-
-      </header>
+      <WorkflowHeader
+        locale={locale}
+        isEn={isEn}
+        overallFilled={overallFilled}
+        totalSteps={steps.length}
+        projectName={projectName}
+        prevStepId={prevStepId}
+        nextStepId={nextStepId}
+        allDone={allDone}
+        tr={tr}
+        onBackHome={() => {
+          setStage("onboard");
+          if (pathname === "/workflow") {
+            router.push("/");
+          }
+        }}
+        onLocaleChange={setLocale}
+        onProjectNameChange={setProjectName}
+        onPrevStep={() => {
+          if (prevStepId) setActiveStepId(prevStepId);
+        }}
+        onNextStep={() => {
+          if (nextStepId) setActiveStepId(nextStepId);
+        }}
+        onGoToGenerate={scrollToRenderPanel}
+      />
 
       {/* ===== Body ===== */}
       <div className="flex-1 grid grid-cols-[1fr_420px] overflow-hidden">
@@ -1813,274 +1544,64 @@ export default function Home() {
           </div>
         </main>
 
-        {/* RIGHT: chat */}
-        <aside className="bg-white border-l border-zinc-200 flex flex-col">
-          <div className="px-5 py-3 border-b border-zinc-200">
-            <h3 className="text-sm font-semibold">{tr("💬 Write Script with AI", "💬 和 AI 一起写脚本")}</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              {tr("Current step:", "正在填：")}
-              <span className="text-zinc-800 font-medium">
-                {steps.find((s) => s.id === activeStepId)?.title}
-              </span>
-            </p>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
-            {chat.map((m, i) => (
-              <div
-                key={i}
-                className={`max-w-[88%] text-[13px] leading-relaxed rounded-xl px-3.5 py-2.5 whitespace-pre-wrap ${
-                  m.role === "ai"
-                    ? "bg-zinc-100 text-zinc-800 self-start rounded-bl-sm"
-                    : "bg-black text-white self-end rounded-br-sm"
-                }`}
-              >
-                {m.tag && (
-                  <div className="text-[10px] uppercase tracking-wider opacity-60 mb-1">
-                    {m.tag}
-                  </div>
-                )}
-                {m.text}
-              </div>
-            ))}
-            {chatLoading && (
-              <div className="max-w-[88%] text-[12px] leading-relaxed rounded-xl px-3.5 py-2 bg-zinc-100 text-zinc-500 self-start rounded-bl-sm">
-                {tr("Thinking with prompts...", "正在结合 prompts 思考中…")}
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          <div className="p-3 border-t border-zinc-200 bg-zinc-50">
-            <div className="bg-white border border-zinc-300 rounded-xl p-2.5 focus-within:border-zinc-500">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                disabled={chatLoading}
-                placeholder={tr(
-                  "Chat with AI or type content directly (Enter to send · Shift+Enter newline)",
-                  "和 AI 聊聊，或直接写内容（Enter 发送 · Shift+Enter 换行）",
-                )}
-                rows={2}
-                className="w-full text-[13px] resize-none focus:outline-none placeholder:text-zinc-400"
-              />
-              {chatError && (
-                <div className="mt-1 text-[11px] text-red-600">{chatError}</div>
-              )}
-              <div className="flex items-center gap-1.5 mt-1">
-                <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
-                  {tr("📎 Assets", "📎 素材")}
-                </button>
-                <button
-                  onClick={generateLogo}
-                  disabled={logoGenerating}
-                  className={`text-[11px] px-2 py-0.5 rounded ${
-                    logoGenerating
-                      ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
-                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-                  }`}
-                >
-                  {logoGenerating ? tr("🎨 Generating...", "🎨 生成中...") : "🎨 Logo"}
-                </button>
-                <button className="text-[11px] px-2 py-0.5 bg-zinc-100 rounded text-zinc-600 hover:bg-zinc-200">
-                  {tr("🔗 Links", "🔗 链接")}
-                </button>
-                <div className="flex-1" />
-                <button
-                  onClick={sendMessage}
-                  disabled={chatLoading || !input.trim()}
-                  className={`w-7 h-7 rounded-md text-white text-sm ${
-                    chatLoading || !input.trim()
-                      ? "bg-zinc-300 cursor-not-allowed"
-                      : "bg-black hover:bg-zinc-700"
-                  }`}
-                >
-                  ↑
-                </button>
-              </div>
-            </div>
-          </div>
-        </aside>
+        <WorkflowChatSidebar
+          activeStepTitle={steps.find((s) => s.id === activeStepId)?.title ?? ""}
+          chat={chat}
+          input={input}
+          chatLoading={chatLoading}
+          chatError={chatError}
+          logoGenerating={logoGenerating}
+          tr={tr}
+          chatEndRef={chatEndRef}
+          onInputChange={setInput}
+          onSendMessage={sendMessage}
+          onGenerateLogo={generateLogo}
+        />
       </div>
 
-      {/* ===== Segment preview modal ===== */}
-      {previewSegment && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
-          onClick={() => setPreviewSegment(null)}
-        >
-          <div
-            className="bg-white rounded-2xl p-4 w-[560px] max-w-full shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="text-sm font-semibold">{previewSegment.label}</div>
-                <div className="text-[11px] text-zinc-500 tabular-nums">
-                  {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)} · {tr("from raw demo", "来自原始 demo")}
-                </div>
-              </div>
-              <button
-                onClick={() => setPreviewSegment(null)}
-                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
+      <SegmentPreviewModal
+        segment={previewSegment}
+        demoVideo={demoVideo}
+        previewVideoRef={previewVideoRef}
+        formatTime={formatTime}
+        tr={tr}
+        onClose={() => setPreviewSegment(null)}
+      />
 
-            <div
-              className="relative rounded-lg overflow-hidden aspect-video"
-              style={{
-                background: `linear-gradient(135deg, ${previewSegment.accent} 0%, #111 100%)`,
-              }}
-            >
-              {demoVideo?.url ? (
-                <video
-                  ref={previewVideoRef}
-                  src={demoVideo.url}
-                  controls
-                  className="absolute inset-0 w-full h-full object-contain bg-black"
-                />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <div className="text-5xl mb-2">{previewSegment.emoji}</div>
-                  <div className="text-xs opacity-80">{tr("No demo uploaded · showing placeholder storyboard", "没上传 demo 视频 · 显示占位分镜")}</div>
-                  <div className="mt-3 text-[11px] bg-white/20 px-2 py-0.5 rounded-full tabular-nums">
-                    ▶ {formatTime(previewSegment.start)} – {formatTime(previewSegment.end)}
-                  </div>
-                </div>
-              )}
-            </div>
+      <PromptPreviewModal
+        title="Story Prompt Preview"
+        content={storyPromptPreview}
+        sources={storyPromptSources}
+        onClose={() => setStoryPromptPreview(null)}
+      />
+      <PromptPreviewModal
+        title="Voice Prompt Preview"
+        content={voicePromptPreview}
+        sources={voicePromptSources}
+        onClose={() => setVoicePromptPreview(null)}
+      />
+      <PromptPreviewModal
+        title="Scene Prompt Preview"
+        content={scenePromptPreview}
+        sources={scenePromptSources}
+        onClose={() => setScenePromptPreview(null)}
+      />
 
-            <div className="mt-3 text-[13px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2">
-              {previewSegment.caption}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Story prompt preview modal ===== */}
-      {storyPromptPreview && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
-          onClick={() => setStoryPromptPreview(null)}
-        >
-          <div
-            className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <div className="text-sm font-semibold">Story Prompt Preview</div>
-                <div className="text-[11px] text-zinc-500 mt-1">
-                  Split sub-prompts used:
-                  {storyPromptSources.length > 0 ? ` ${storyPromptSources.join(" | ")}` : " (none)"}
-                </div>
-              </div>
-              <button
-                onClick={() => setStoryPromptPreview(null)}
-                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <pre className="flex-1 overflow-auto text-[12px] leading-relaxed bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap">
-              {storyPromptPreview}
-            </pre>
-          </div>
-        </div>
-      )}
-
-      {storyPromptError && (
-        <div className="fixed bottom-4 right-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow">
-          Story prompt error: {storyPromptError}
-        </div>
-      )}
-
-      {/* ===== Voice prompt preview modal ===== */}
-      {voicePromptPreview && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
-          onClick={() => setVoicePromptPreview(null)}
-        >
-          <div
-            className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <div className="text-sm font-semibold">Voice Prompt Preview</div>
-                <div className="text-[11px] text-zinc-500 mt-1">
-                  Split sub-prompts used:
-                  {voicePromptSources.length > 0 ? ` ${voicePromptSources.join(" | ")}` : " (none)"}
-                </div>
-              </div>
-              <button
-                onClick={() => setVoicePromptPreview(null)}
-                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <pre className="flex-1 overflow-auto text-[12px] leading-relaxed bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap">
-              {voicePromptPreview}
-            </pre>
-          </div>
-        </div>
-      )}
-
-      {voicePromptError && (
-        <div className="fixed bottom-4 left-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow">
-          Voice prompt error: {voicePromptError}
-        </div>
-      )}
-
-      {/* ===== Scene prompt preview modal ===== */}
-      {scenePromptPreview && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4"
-          onClick={() => setScenePromptPreview(null)}
-        >
-          <div
-            className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <div className="text-sm font-semibold">Scene Prompt Preview</div>
-                <div className="text-[11px] text-zinc-500 mt-1">
-                  Split sub-prompts used:
-                  {scenePromptSources.length > 0 ? ` ${scenePromptSources.join(" | ")}` : " (none)"}
-                </div>
-              </div>
-              <button
-                onClick={() => setScenePromptPreview(null)}
-                className="text-zinc-400 hover:text-zinc-800 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            <pre className="flex-1 overflow-auto text-[12px] leading-relaxed bg-zinc-50 border border-zinc-200 rounded-md p-3 whitespace-pre-wrap">
-              {scenePromptPreview}
-            </pre>
-          </div>
-        </div>
-      )}
-
-      {scenePromptError && (
-        <div className="fixed bottom-20 left-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow">
-          Scene prompt error: {scenePromptError}
-        </div>
-      )}
+      <PromptErrorToast
+        message={storyPromptError}
+        label="Story prompt error"
+        className="fixed bottom-4 right-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow"
+      />
+      <PromptErrorToast
+        message={voicePromptError}
+        label="Voice prompt error"
+        className="fixed bottom-4 left-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow"
+      />
+      <PromptErrorToast
+        message={scenePromptError}
+        label="Scene prompt error"
+        className="fixed bottom-20 left-4 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-md shadow"
+      />
 
     </div>
   );
