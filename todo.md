@@ -24,6 +24,18 @@
   - audio_transcriptions
 - Saved deployable schema file: `UI/demodance/db/butterbase-schema.applied.json`.
 - Added schema push script: `UI/demodance/db/push-butterbase-schema.sh`.
+- Added page-level navigation:
+  - `/` as onboarding page
+  - `/workflow` as workflow page entry
+- Added top-level workflow navigation controls:
+  - Header `Prev` / `Next` step controls
+  - Header back-to-home behavior
+- Refactored large `app/page.tsx` into reusable modules:
+  - `UI/demodance/app/home/types.ts`
+  - `UI/demodance/app/home/onboarding-screen.tsx`
+  - `UI/demodance/app/home/modals.tsx`
+  - `UI/demodance/app/home/workflow-header.tsx`
+  - `UI/demodance/app/home/workflow-chat-sidebar.tsx`
 
 ## Next
 - Implement `/api/projects` CRUD via Butterbase Data API.
@@ -37,45 +49,54 @@
 
 ## Next: Video Upload -> Analyze -> Feature Split
 
+### Current status
+- [x] UI has feature segment rendering and preview modal.
+- [x] Backend has both understand engines:
+  - `POST /api/video/understand`
+  - `POST /api/ffmpeg_understand`
+- [ ] Frontend onboarding keeps real `File` object for server upload.
+- [ ] Frontend still uses mock feature segments (`mockSegments`).
+- [ ] No unified analyze endpoint (`/api/video/analyze`) yet.
+
 ### Phase 1. Upload then analyze (real pipeline)
-- Keep original `File` object in frontend state (not only preview URL metadata).
-- In onboarding `Start` flow:
-  - Upload file to `POST /api/video/files` and get `file_id`.
-  - Call `POST /api/video/understand` with `file_id`.
-- Enforce structured output contract from understanding call:
-  - Must contain time segments + feature/event descriptions.
+- [ ] Keep original `File` object in frontend state (not only preview URL metadata).
+- [ ] In onboarding `Start` flow:
+  - [ ] Upload file to `POST /api/video/files` and get `file_id`.
+  - [ ] Call `POST /api/video/understand` with `file_id`.
+- [ ] Enforce structured output contract from understanding call:
+  - [ ] Must contain time segments + feature/event descriptions.
 - Acceptance:
-  - After upload, UI receives structured analysis JSON (not free-form text).
+  - [ ] After upload, UI receives structured analysis JSON (not free-form text).
 
 ### Phase 2. Dual-engine strategy (BytePlus + ffmpeg fallback)
-- Add orchestrator endpoint (suggestion: `POST /api/video/analyze`).
-- Engine policy:
-  - Primary: BytePlus understand (`/api/video/understand`).
-  - Fallback: ffmpeg understand (`/api/ffmpeg_understand`) when primary fails or output quality invalid.
-- Normalize both into one schema:
-  - `features[]`, `segments[]`, `confidence`, `source_engine`.
+- [ ] Add orchestrator endpoint (suggestion: `POST /api/video/analyze`).
+- [ ] Engine policy:
+  - [ ] Primary: BytePlus understand (`/api/video/understand`).
+  - [ ] Fallback: ffmpeg understand (`/api/ffmpeg_understand`) when primary fails or output quality invalid.
+- [ ] Normalize both into one schema:
+  - [ ] `features[]`, `segments[]`, `confidence`, `source_engine`.
 - Acceptance:
-  - Frontend consumes one stable response schema regardless of engine used.
+  - [ ] Frontend consumes one stable response schema regardless of engine used.
 
 ### Phase 3. Fill Features step from analysis (replace mockSegments)
-- Remove hardcoded `mockSegments` path in `app/page.tsx`.
-- Map analyzed `features` + `segments` to:
-  - `steps.features.fields[i].value`
-  - `steps.features.fields[i].segment`
-- Graceful degradation:
-  - If only 1-2 features recognized, keep remaining fields editable and empty/default.
+- [ ] Remove hardcoded `mockSegments` path in `app/page.tsx`.
+- [ ] Map analyzed `features` + `segments` to:
+  - [ ] `steps.features.fields[i].value`
+  - [ ] `steps.features.fields[i].segment`
+- [ ] Graceful degradation:
+  - [ ] If only 1-2 features recognized, keep remaining fields editable and empty/default.
 - Acceptance:
-  - Feature thumbnails/time ranges come from uploaded video analysis, and preview seeks to real segment.
+  - [ ] Feature thumbnails/time ranges come from uploaded video analysis, and preview seeks to real segment.
 
 ### Phase 4. Persistence + replay
-- Persist uploaded demo asset and analyze output to DB:
-  - Reuse `project_assets` with `metadata`, or add dedicated segment table.
-- On page reload, hydrate feature text + segment metadata without re-analyzing.
+- [ ] Persist uploaded demo asset and analyze output to DB:
+  - [ ] Reuse `project_assets` with `metadata`, or add dedicated segment table.
+- [ ] On page reload, hydrate feature text + segment metadata without re-analyzing.
 - Acceptance:
-  - Re-entering same project restores analyzed features/segments directly.
+  - [ ] Re-entering same project restores analyzed features/segments directly.
 
 ### Implementation order (fastest path)
-1. Implement `/api/video/analyze` orchestrator + unified schema.
-2. Wire `handleStart()` to upload + analyze.
-3. Replace `mockSegments` with real parsed segments from analyze response.
-4. Add DB persistence/hydration.
+1. [ ] Implement `/api/video/analyze` orchestrator + unified schema.
+2. [ ] Wire `handleStart()` to upload + analyze.
+3. [ ] Replace `mockSegments` with real parsed segments from analyze response.
+4. [ ] Add DB persistence/hydration.

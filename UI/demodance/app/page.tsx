@@ -18,6 +18,21 @@ import {
 } from "./home/types";
 import { useLocale } from "./locale-provider";
 
+type AnalyzeApiSegment = {
+  start?: unknown;
+  end?: unknown;
+  label?: unknown;
+  caption?: unknown;
+  confidence?: unknown;
+};
+
+type AnalyzeApiResponse = {
+  ok?: unknown;
+  source_engine?: unknown;
+  features?: unknown;
+  segments?: unknown;
+};
+
 export default function Home() {
   const router = useRouter();
   const pathname = usePathname();
@@ -25,6 +40,7 @@ export default function Home() {
   const [stage, setStage] = useState<"onboard" | "workflow">(pathname === "/workflow" ? "workflow" : "onboard");
   const [submission, setSubmission] = useState("");
   const [demoVideo, setDemoVideo] = useState<DemoVideoMeta | null>(null);
+  const [demoVideoFile, setDemoVideoFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [previewSegment, setPreviewSegment] = useState<FeatureSegment | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -107,6 +123,33 @@ export default function Home() {
     const asString = (value: unknown, fallback = ""): string =>
       typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
 
+    const normalizeAnalyzeSegments = (data: AnalyzeApiResponse, features: string[]): FeatureSegment[] => {
+      const palette = [
+        { accent: "#0ea5e9", emoji: "🎬" },
+        { accent: "#f97316", emoji: "✨" },
+        { accent: "#8b5cf6", emoji: "🎞️" },
+      ];
+
+      const raw = Array.isArray(data.segments) ? (data.segments as AnalyzeApiSegment[]) : [];
+      return raw
+        .map((seg, idx) => {
+          const start = Number.parseFloat(String(seg.start ?? ""));
+          const end = Number.parseFloat(String(seg.end ?? ""));
+          if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+          const theme = palette[idx % palette.length];
+          return {
+            start: Math.max(0, Math.round(start)),
+            end: Math.max(0, Math.round(end)),
+            label: asString(seg.label, tr(`Feature Segment ${idx + 1}`, `功能片段 ${idx + 1}`)),
+            accent: theme.accent,
+            emoji: theme.emoji,
+            caption: asString(seg.caption, features[idx] || ""),
+          } as FeatureSegment;
+        })
+        .filter((v): v is FeatureSegment => Boolean(v))
+        .slice(0, 3);
+    };
+
     try {
       const fillPrompt = [
         isEn
@@ -173,8 +216,45 @@ export default function Home() {
       const rawFeatures = Array.isArray(parsed?.features)
         ? parsed.features.filter((v): v is string => typeof v === "string" && v.trim().length > 0)
         : [];
-      const features = [rawFeatures[0], rawFeatures[1], rawFeatures[2]].map(
-        (v, i) => v?.trim() || defaultFeatures[i],
+      let analyzedSource = "";
+      let analyzedFeatures: string[] = [];
+      let analyzedSegments: FeatureSegment[] = [];
+
+      if (demoVideoFile) {
+        const analyzeForm = new FormData();
+        analyzeForm.append("file", demoVideoFile, demoVideoFile.name || "demo.mp4");
+        analyzeForm.append(
+          "prompt",
+          tr(
+            "Extract up to 3 key feature demonstrations from this product demo with accurate time ranges.",
+            "从这个产品演示里提取最多 3 个关键功能演示，并给出准确时间范围。",
+          ),
+        );
+
+        try {
+          const analyzeResp = await fetch("/api/video/analyze", {
+            method: "POST",
+            body: analyzeForm,
+          });
+          const analyzeData = (await analyzeResp.json()) as AnalyzeApiResponse;
+
+          if (analyzeResp.ok) {
+            analyzedSource = asString(analyzeData.source_engine);
+            analyzedFeatures = Array.isArray(analyzeData.features)
+              ? analyzeData.features
+                  .map((v) => asString(v))
+                  .filter(Boolean)
+                  .slice(0, 3)
+              : [];
+            analyzedSegments = normalizeAnalyzeSegments(analyzeData, analyzedFeatures);
+          }
+        } catch {
+          // Fall back to LLM-only defaults when video analyze fails.
+        }
+      }
+
+      const features = [analyzedFeatures[0], analyzedFeatures[1], analyzedFeatures[2]].map(
+        (v, i) => v?.trim() || rawFeatures[i]?.trim() || defaultFeatures[i],
       );
       const techStack = asString(parsed?.tech_stack, "Next.js · AI SDK · Remotion · Postgres");
       const impact = asString(
@@ -211,6 +291,7 @@ export default function Home() {
           caption: features[2],
         },
       ];
+      const featureSegments = analyzedSegments.length > 0 ? analyzedSegments : mockSegments;
 
       setSteps((prev) =>
         prev.map((s) => {
@@ -247,7 +328,7 @@ export default function Home() {
               ...s,
               fields: s.fields.map((f, i) => {
                 if (f.key.startsWith("feature")) {
-                  const seg = mockSegments[i];
+                  const seg = featureSegments[i];
                   return {
                     ...f,
                     value: features[i] || f.value,
@@ -286,8 +367,12 @@ export default function Home() {
           tag: tr("Submission Parsed", "已读取提交材料"),
           text: demoVideo
             ? tr(
-                `Read ${submission.length} chars, loaded "${demoVideo.name}", and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
-                `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
+                analyzedSource
+                  ? `Read ${submission.length} chars, loaded "${demoVideo.name}", and used ${analyzedSource} video analyze + LLM to fill steps 2-6. Review Step 2 to Step 6 👀`
+                  : `Read ${submission.length} chars, loaded "${demoVideo.name}", and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
+                analyzedSource
+                  ? `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 ${analyzedSource} 视频分析 + LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`
+                  : `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
               )
             : tr(
                 `Read ${submission.length} chars and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
@@ -897,7 +982,9 @@ export default function Home() {
       await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "output.mp4"]);
       
       const data = await ffmpeg.readFile("output.mp4");
-      const blob = new Blob([data as Uint8Array], { type: "video/mp4" });
+      const bytes =
+        data instanceof Uint8Array ? Uint8Array.from(data) : new TextEncoder().encode(String(data));
+      const blob = new Blob([bytes.buffer], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
       
       const name = (projectName || "DemoDance").trim().replace(/\s+/g, "_");
@@ -1177,6 +1264,7 @@ export default function Home() {
         onSubmissionChange={setSubmission}
         onDemoVideoSelect={(file) => {
           if (demoVideo?.url) URL.revokeObjectURL(demoVideo.url);
+          setDemoVideoFile(file);
           setDemoVideo({ name: file.name, size: file.size, url: URL.createObjectURL(file) });
         }}
         onStart={handleStart}
@@ -1499,7 +1587,7 @@ export default function Home() {
                                 <span className="text-xs text-red-500 border border-red-200 rounded px-1 w-fit">
                                   No URL Extracted
                                 </span>
-                                {section.rawResponse && (
+                                {!!section.rawResponse && (
                                   <details className="text-[10px] text-zinc-500 overflow-hidden bg-zinc-100 rounded p-1">
                                     <summary className="cursor-pointer font-medium text-zinc-600">Raw API Response</summary>
                                     <pre className="max-h-32 overflow-y-auto mt-1 p-1 bg-zinc-200 rounded">{JSON.stringify(section.rawResponse, null, 2)}</pre>
