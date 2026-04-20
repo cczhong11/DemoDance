@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { DemoVideoMeta, FeatureSegment } from "./types";
 
 type PromptPreviewModalProps = {
@@ -176,6 +177,82 @@ export function SegmentPreviewModal({
 
         <div className="mt-3 text-[13px] leading-relaxed text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-md px-3 py-2">
           {segment.caption}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type VideoJsPreviewModalProps = {
+  title: string;
+  src: string | null;
+  onClose: () => void;
+};
+
+export function VideoJsPreviewModal({ title, src, onClose }: VideoJsPreviewModalProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const playerRef = useRef<{
+    dispose: () => void;
+    src: (source: { src: string; type: string }) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!src || !videoRef.current) return;
+
+    let mounted = true;
+
+    (async () => {
+      const videojs = (await import("video.js")).default;
+      if (!mounted || !videoRef.current) return;
+
+      if (!playerRef.current) {
+        playerRef.current = videojs(videoRef.current, {
+          controls: true,
+          autoplay: false,
+          preload: "auto",
+          fluid: true,
+        });
+      }
+
+      playerRef.current.src({ src, type: "video/mp4" });
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [src]);
+
+  useEffect(() => {
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.dispose();
+        playerRef.current = null;
+      }
+    };
+  }, []);
+
+  if (!src) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <link rel="stylesheet" href="https://vjs.zencdn.net/8.23.4/video-js.css" />
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="text-sm font-semibold">{title}</div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-800 text-lg leading-none">
+            ×
+          </button>
+        </div>
+
+        <div className="w-full bg-black rounded-lg overflow-hidden">
+          <video
+            ref={videoRef}
+            className="video-js vjs-default-skin vjs-big-play-centered w-full h-full"
+            playsInline
+          />
         </div>
       </div>
     </div>

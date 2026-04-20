@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { OnboardingScreen } from "./home/onboarding-screen";
-import { PromptErrorToast, PromptPreviewModal, SectionPromptModal, SegmentPreviewModal } from "./home/modals";
+import { PromptErrorToast, PromptPreviewModal, SectionPromptModal, SegmentPreviewModal, VideoJsPreviewModal } from "./home/modals";
 import { WorkflowChatSidebar } from "./home/workflow-chat-sidebar";
 import { WorkflowHeader } from "./home/workflow-header";
 import {
@@ -78,6 +78,7 @@ export default function Home() {
   const [loadingScenePrompt, setLoadingScenePrompt] = useState(false);
   const [scenePromptError, setScenePromptError] = useState<string | null>(null);
   const [activeSectionPromptId, setActiveSectionPromptId] = useState<StepId | null>(null);
+  const [previewSectionVideo, setPreviewSectionVideo] = useState<{ title: string; url: string } | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [logoGenerating, setLogoGenerating] = useState(false);
@@ -86,6 +87,14 @@ export default function Home() {
   const renderPanelRef = useRef<HTMLDivElement>(null);
   const workflowHydratedRef = useRef(false);
   const stopGenerationRef = useRef(false);
+
+  function toStrictArrayBuffer(data: unknown): ArrayBuffer {
+    const bytes =
+      data instanceof Uint8Array ? Uint8Array.from(data) : new TextEncoder().encode(String(data));
+    const arrayBuffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(arrayBuffer).set(bytes);
+    return arrayBuffer;
+  }
 
   function saveWorkflowDraft(draft: WorkflowDraft) {
     try {
@@ -188,9 +197,9 @@ export default function Home() {
         ]);
 
         const data = await ffmpeg.readFile(outputName);
-        const bytes =
-          data instanceof Uint8Array ? Uint8Array.from(data) : new TextEncoder().encode(String(data));
-        const clipUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: "video/mp4" }));
+        const clipUrl = URL.createObjectURL(
+          new Blob([toStrictArrayBuffer(data)], { type: "video/mp4" }),
+        );
         clipped.push({ ...seg, clipUrl });
       } catch {
         clipped.push(seg);
@@ -1453,9 +1462,7 @@ export default function Home() {
       await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "output.mp4"]);
       
       const data = await ffmpeg.readFile("output.mp4");
-      const bytes =
-        data instanceof Uint8Array ? Uint8Array.from(data) : new TextEncoder().encode(String(data));
-      const blob = new Blob([bytes.buffer], { type: "video/mp4" });
+      const blob = new Blob([toStrictArrayBuffer(data)], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
       
       const name = (projectName || "DemoDance").trim().replace(/\s+/g, "_");
@@ -2210,14 +2217,26 @@ export default function Home() {
                               <span className="text-zinc-400 ml-1">({section.apiState || "no-api-state"})</span>
                             </span>
                             {section.videoUrl ? (
-                              <a
-                                href={section.videoUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 ml-1"
-                              >
-                                {tr("Preview", "预览")}
-                              </a>
+                              <>
+                                <button
+                                  onClick={() =>
+                                    setPreviewSectionVideo({
+                                      title: `${section.title} · ${tr("Clip Preview", "片段预览")}`,
+                                      url: section.videoUrl!,
+                                    })
+                                  }
+                                  className="text-xs px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 ml-1"
+                                >
+                                  {tr("Preview", "预览")}
+                                </button>
+                                <a
+                                  href={section.videoUrl}
+                                  download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_")}_${section.id}.mp4`}
+                                  className="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                                >
+                                  {tr("Download", "下载")}
+                                </a>
+                              </>
                             ) : (
                               <div className="flex flex-col gap-1 w-full mt-2 border-t border-zinc-200 pt-2">
                                 <span className="text-xs text-red-500 border border-red-200 rounded px-1 w-fit">
@@ -2307,6 +2326,11 @@ export default function Home() {
         content={scenePromptPreview}
         sources={scenePromptSources}
         onClose={() => setScenePromptPreview(null)}
+      />
+      <VideoJsPreviewModal
+        title={previewSectionVideo?.title ?? tr("Clip Preview", "片段预览")}
+        src={previewSectionVideo?.url ?? null}
+        onClose={() => setPreviewSectionVideo(null)}
       />
       <SectionPromptModal
         open={Boolean(activeSectionPrompt)}
