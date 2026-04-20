@@ -1,5 +1,3 @@
-import type { RefObject } from "react";
-
 import type { DemoVideoMeta, FeatureSegment } from "./types";
 
 type PromptPreviewModalProps = {
@@ -39,6 +37,68 @@ export function PromptPreviewModal({ title, content, sources, onClose }: PromptP
   );
 }
 
+type SectionPromptModalProps = {
+  open: boolean;
+  title: string;
+  value: string;
+  resetLabel: string;
+  closeLabel: string;
+  onChange: (next: string) => void;
+  onReset: () => void;
+  onClose: () => void;
+};
+
+export function SectionPromptModal({
+  open,
+  title,
+  value,
+  resetLabel,
+  closeLabel,
+  onChange,
+  onReset,
+  onClose,
+}: SectionPromptModalProps) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl p-4 w-[900px] max-w-full shadow-xl max-h-[86vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="text-sm font-semibold">{title}</div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-800 text-lg leading-none">
+            ×
+          </button>
+        </div>
+
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={16}
+          className="flex-1 w-full rounded-md border border-zinc-200 bg-zinc-50 p-3 text-[12px] leading-relaxed text-zinc-800 resize-y focus:outline-none focus:ring-1 focus:ring-zinc-300"
+        />
+
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <button
+            onClick={onReset}
+            className="text-xs px-3 py-1.5 rounded border border-zinc-300 hover:bg-zinc-100"
+          >
+            {resetLabel}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-xs px-3 py-1.5 rounded bg-black text-white hover:bg-zinc-800"
+          >
+            {closeLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type PromptErrorToastProps = {
   message: string | null;
   label: string;
@@ -58,7 +118,6 @@ export function PromptErrorToast({ message, label, className }: PromptErrorToast
 type SegmentPreviewModalProps = {
   segment: FeatureSegment | null;
   demoVideo: DemoVideoMeta | null;
-  previewVideoRef: RefObject<HTMLVideoElement | null>;
   formatTime: (sec: number) => string;
   tr: (en: string, zh: string) => string;
   onClose: () => void;
@@ -67,7 +126,6 @@ type SegmentPreviewModalProps = {
 export function SegmentPreviewModal({
   segment,
   demoVideo,
-  previewVideoRef,
   formatTime,
   tr,
   onClose,
@@ -95,17 +153,20 @@ export function SegmentPreviewModal({
             background: `linear-gradient(135deg, ${segment.accent} 0%, #111 100%)`,
           }}
         >
-          {demoVideo?.url ? (
+          {segment.clipUrl ? (
             <video
-              ref={previewVideoRef}
-              src={demoVideo.url}
+              src={segment.clipUrl}
               controls
               className="absolute inset-0 w-full h-full object-contain bg-black"
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
               <div className="text-5xl mb-2">{segment.emoji}</div>
-              <div className="text-xs opacity-80">{tr("No demo uploaded · showing placeholder storyboard", "没上传 demo 视频 · 显示占位分镜")}</div>
+              <div className="text-xs opacity-80">
+                {demoVideo?.url
+                  ? tr("Clip not ready yet", "切片暂未就绪")
+                  : tr("No demo uploaded · showing placeholder storyboard", "没上传 demo 视频 · 显示占位分镜")}
+              </div>
               <div className="mt-3 text-[11px] bg-white/20 px-2 py-0.5 rounded-full tabular-nums">
                 ▶ {formatTime(segment.start)} – {formatTime(segment.end)}
               </div>

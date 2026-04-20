@@ -32,3 +32,41 @@ export async function GET(_: Request, context: { params: Promise<{ taskId: strin
     return jsonError("BytePlus video API unavailable", 502, details);
   }
 }
+
+export async function DELETE(_: Request, context: { params: Promise<{ taskId: string }> }) {
+  const config = getBytePlusConfig();
+  if (!config.apiKey) {
+    return jsonError("BYTEPLUS_ARK_API_KEY is not set", 500);
+  }
+
+  const { taskId } = await context.params;
+
+  try {
+    const response = await fetch(`${config.baseUrl}/contents/generations/tasks/${taskId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const details = await readResponseDetails(response);
+      return jsonError("BytePlus video API request failed", response.status, details);
+    }
+
+    const text = await response.text();
+    if (!text.trim()) {
+      return NextResponse.json({ ok: true, task_id: taskId, action: "deleted_or_cancelled" });
+    }
+
+    try {
+      const result = JSON.parse(text) as unknown;
+      return NextResponse.json(result);
+    } catch {
+      return NextResponse.json({ ok: true, task_id: taskId, action: "deleted_or_cancelled", raw: text });
+    }
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    return jsonError("BytePlus video API unavailable", 502, details);
+  }
+}

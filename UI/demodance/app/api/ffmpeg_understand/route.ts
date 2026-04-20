@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
-import { getIonRouterConfig } from "@/lib/server/config";
+import { getIonRouterConfig, resolveIonRouterBaseUrlByModel } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -299,11 +299,12 @@ export async function POST(request: Request) {
 
     const batches = chunkArray(frames, parsed.batchSize);
     const frameInsights: FrameInsight[] = [];
+    const baseUrl = resolveIonRouterBaseUrlByModel(parsed.model, ion.baseUrl);
 
     for (const batch of batches) {
       const insights = await analyzeBatchWithVisionModel({
         apiKey: ion.apiKey,
-        baseUrl: ion.baseUrl,
+        baseUrl,
         model: parsed.model,
         prompt: parsed.prompt,
         maxTokens: parsed.maxTokens,

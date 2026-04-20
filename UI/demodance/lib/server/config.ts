@@ -24,11 +24,21 @@ export function getIonRouterConfig(): IonRouterConfig {
   return {
     apiKey: process.env.IONROUTER_API_KEY ?? "",
     baseUrl: (process.env.IONROUTER_BASE_URL ?? "https://api.ionrouter.io/v1").replace(/\/$/, ""),
-    defaultTextModel: process.env.IONROUTER_TEXT_MODEL ?? "qwen3-30b-a3b",
+    defaultTextModel: process.env.IONROUTER_TEXT_MODEL ?? "kimi-k2.5",
     defaultTtsModel: process.env.IONROUTER_TTS_MODEL ?? "orpheus-3b",
     defaultTtsVoice: process.env.IONROUTER_TTS_VOICE ?? "tara",
     defaultSttModel: process.env.IONROUTER_STT_MODEL ?? "whisper-1",
   };
+}
+
+const KIMI_K25_BASE_URL = "https://kimi.ionrouter.io/v1";
+
+export function resolveIonRouterBaseUrlByModel(model: string | undefined, fallbackBaseUrl: string): string {
+  const normalized = (model ?? "").trim().toLowerCase();
+  if (normalized.startsWith("kimi-k2.5")) {
+    return KIMI_K25_BASE_URL;
+  }
+  return fallbackBaseUrl;
 }
 
 export function getBytePlusConfig(): BytePlusConfig {

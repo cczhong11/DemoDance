@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { OnboardingScreen } from "./home/onboarding-screen";
-import { PromptErrorToast, PromptPreviewModal, SegmentPreviewModal } from "./home/modals";
+import { PromptErrorToast, PromptPreviewModal, SectionPromptModal, SegmentPreviewModal } from "./home/modals";
 import { WorkflowChatSidebar } from "./home/workflow-chat-sidebar";
 import { WorkflowHeader } from "./home/workflow-header";
 import {
@@ -33,6 +33,16 @@ type AnalyzeApiResponse = {
   segments?: unknown;
 };
 
+type WorkflowDraft = {
+  steps: Step[];
+  activeStepId: StepId;
+  chat: ChatMsg[];
+  projectName: string;
+  submission: string;
+};
+
+const WORKFLOW_DRAFT_KEY = "demodance.workflow.draft.v1";
+
 export default function Home() {
   const router = useRouter();
   const pathname = usePathname();
@@ -43,7 +53,6 @@ export default function Home() {
   const [demoVideoFile, setDemoVideoFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [previewSegment, setPreviewSegment] = useState<FeatureSegment | null>(null);
-  const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   const [steps, setSteps] = useState<Step[]>(() => getInitialSteps("en"));
   const [activeStepId, setActiveStepId] = useState<StepId>("audience");
@@ -68,11 +77,52 @@ export default function Home() {
   const [scenePromptSources, setScenePromptSources] = useState<string[]>([]);
   const [loadingScenePrompt, setLoadingScenePrompt] = useState(false);
   const [scenePromptError, setScenePromptError] = useState<string | null>(null);
+  const [activeSectionPromptId, setActiveSectionPromptId] = useState<StepId | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [logoGenerating, setLogoGenerating] = useState(false);
+  const [lastLogoPrompt, setLastLogoPrompt] = useState<string | null>(null);
   const isEn = locale === "en";
   const renderPanelRef = useRef<HTMLDivElement>(null);
+  const workflowHydratedRef = useRef(false);
+  const stopGenerationRef = useRef(false);
+
+  function saveWorkflowDraft(draft: WorkflowDraft) {
+    try {
+      window.sessionStorage.setItem(WORKFLOW_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  useEffect(() => {
+    if (pathname !== "/workflow" || workflowHydratedRef.current) return;
+    workflowHydratedRef.current = true;
+
+    try {
+      const raw = window.sessionStorage.getItem(WORKFLOW_DRAFT_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as Partial<WorkflowDraft>;
+      if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+        setSteps(parsed.steps as Step[]);
+      }
+      if (typeof parsed.activeStepId === "string") {
+        setActiveStepId(parsed.activeStepId as StepId);
+      }
+      if (Array.isArray(parsed.chat) && parsed.chat.length > 0) {
+        setChat(parsed.chat as ChatMsg[]);
+      }
+      if (typeof parsed.projectName === "string" && parsed.projectName.trim()) {
+        setProjectName(parsed.projectName);
+      }
+      if (typeof parsed.submission === "string") {
+        setSubmission(parsed.submission);
+      }
+    } catch {
+      // ignore malformed storage payload
+    }
+  }, [pathname]);
 
   useEffect(() => {
     const templates = getInitialSteps(locale);
@@ -97,6 +147,58 @@ export default function Home() {
       }),
     );
   }, [locale]);
+
+  async function buildFeatureSegmentClips(file: File, segments: FeatureSegment[]): Promise<FeatureSegment[]> {
+    if (segments.length === 0) return segments;
+
+    const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+    const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
+
+    const ffmpeg = new FFmpeg();
+    const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    });
+
+    await ffmpeg.writeFile("feature_source.mp4", await fetchFile(file));
+
+    const clipped: FeatureSegment[] = [];
+    for (let i = 0; i < segments.length; i += 1) {
+      const seg = segments[i];
+      const outputName = `feature_clip_${i}.mp4`;
+      const start = String(Math.max(0, seg.start));
+      const duration = String(Math.max(0.5, seg.end - seg.start));
+
+      try {
+        await ffmpeg.exec([
+          "-ss",
+          start,
+          "-t",
+          duration,
+          "-i",
+          "feature_source.mp4",
+          "-c:v",
+          "libx264",
+          "-c:a",
+          "aac",
+          "-movflags",
+          "+faststart",
+          outputName,
+        ]);
+
+        const data = await ffmpeg.readFile(outputName);
+        const bytes =
+          data instanceof Uint8Array ? Uint8Array.from(data) : new TextEncoder().encode(String(data));
+        const clipUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: "video/mp4" }));
+        clipped.push({ ...seg, clipUrl });
+      } catch {
+        clipped.push(seg);
+      }
+    }
+
+    return clipped;
+  }
 
   async function handleStart() {
     setParsing(true);
@@ -292,9 +394,12 @@ export default function Home() {
         },
       ];
       const featureSegments = analyzedSegments.length > 0 ? analyzedSegments : mockSegments;
+      const clippedFeatureSegments =
+        demoVideoFile && featureSegments.length > 0
+          ? await buildFeatureSegmentClips(demoVideoFile, featureSegments)
+          : featureSegments;
 
-      setSteps((prev) =>
-        prev.map((s) => {
+      const nextSteps = steps.map((s) => {
           if (s.id === "audience") {
             return {
               ...s,
@@ -328,7 +433,7 @@ export default function Home() {
               ...s,
               fields: s.fields.map((f, i) => {
                 if (f.key.startsWith("feature")) {
-                  const seg = featureSegments[i];
+                  const seg = clippedFeatureSegments[i];
                   return {
                     ...f,
                     value: features[i] || f.value,
@@ -352,34 +457,43 @@ export default function Home() {
             };
           }
           return s;
-        }),
-      );
+        });
 
-      setActiveStepId("importance");
+      const nextActiveStepId: StepId = "importance";
+      const aiMessage: ChatMsg = {
+        role: "ai",
+        tag: tr("Submission Parsed", "已读取提交材料"),
+        text: demoVideo
+          ? tr(
+              analyzedSource
+                ? `Read ${submission.length} chars, loaded "${demoVideo.name}", and used ${analyzedSource} video analyze + LLM to fill steps 2-6. Review Step 2 to Step 6 👀`
+                : `Read ${submission.length} chars, loaded "${demoVideo.name}", and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
+              analyzedSource
+                ? `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 ${analyzedSource} 视频分析 + LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`
+                : `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
+            )
+          : tr(
+              `Read ${submission.length} chars and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
+              `读完你的提交材料（${submission.length} 字），已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
+            ),
+      };
+      const nextChat = [...chat, aiMessage];
+
+      setSteps(nextSteps);
+      setChat(nextChat);
+      setActiveStepId(nextActiveStepId);
+      saveWorkflowDraft({
+        steps: nextSteps,
+        activeStepId: nextActiveStepId,
+        chat: nextChat,
+        projectName,
+        submission,
+      });
+
       setStage("workflow");
       if (pathname !== "/workflow") {
         router.push("/workflow");
       }
-      setChat((c) => [
-        ...c,
-        {
-          role: "ai",
-          tag: tr("Submission Parsed", "已读取提交材料"),
-          text: demoVideo
-            ? tr(
-                analyzedSource
-                  ? `Read ${submission.length} chars, loaded "${demoVideo.name}", and used ${analyzedSource} video analyze + LLM to fill steps 2-6. Review Step 2 to Step 6 👀`
-                  : `Read ${submission.length} chars, loaded "${demoVideo.name}", and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
-                analyzedSource
-                  ? `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 ${analyzedSource} 视频分析 + LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`
-                  : `读完你的提交材料（${submission.length} 字）并加载了「${demoVideo.name}」，已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
-              )
-            : tr(
-                `Read ${submission.length} chars and used LLM to fill steps 2-6. Review Step 2 to Step 6 👀`,
-                `读完你的提交材料（${submission.length} 字），已用 LLM 自动填完第2到第6步。先从 Step 2 开始检查 👀`,
-              ),
-        },
-      ]);
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);
       setChat((c) => [
@@ -407,29 +521,6 @@ export default function Home() {
     const s = Math.floor(sec % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
-
-  useEffect(() => {
-    if (!previewSegment) return;
-    const v = previewVideoRef.current;
-    if (!v) return;
-    const onLoaded = () => {
-      v.currentTime = previewSegment.start;
-      v.play().catch(() => {});
-    };
-    const onTime = () => {
-      if (v.currentTime >= previewSegment.end) {
-        v.pause();
-        v.currentTime = previewSegment.start;
-      }
-    };
-    v.addEventListener("loadedmetadata", onLoaded);
-    v.addEventListener("timeupdate", onTime);
-    if (v.readyState >= 1) onLoaded();
-    return () => {
-      v.removeEventListener("loadedmetadata", onLoaded);
-      v.removeEventListener("timeupdate", onTime);
-    };
-  }, [previewSegment]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -685,61 +776,275 @@ export default function Home() {
     }
   }
 
-  function aiSuggest(stepId: StepId) {
+  async function aiSuggest(stepId: StepId) {
     setActiveStepId(stepId);
-    const suggestions: Record<StepId, Record<string, string>> = {
-      audience: {
-        user: tr("Indie developers, hackathon participants, small product teams", "独立开发者、Hackathon 选手、小型产品团队"),
-        problem: tr("Can build products but lack time/skills to produce professional launch videos", "能做出产品，但没时间/技能做出专业的 launch 视频"),
-      },
-      importance: {
-        evidence: tr(
-          "• ProductHunt: 72% of top launches include video on day one\n• X: posts with launch video get 3.8× more engagement\n• YC: investors often only watch the first 30 seconds",
-          "• ProductHunt：72% 上榜产品在 launch 当天有视频\n• X：带视频的新品发帖平均多 3.8× engagement\n• YC：投资人平均只看 demo 视频前 30 秒",
-        ),
-      },
-      product: {
-        logo: tr("(AI generated logo candidates from your product name)", "（AI 已根据你的产品名生成候选 Logo）"),
-        name: "DemoDance",
-        slogan: "From raw demo to launch-ready in 60 seconds.",
-      },
-      features: {
-        feature1: tr("Auto script generation: structured by launch-video template", "脚本自动生成：按经典 launch 视频模板分段撰写"),
-        feature2: tr("Web evidence retrieval: validates your problem statement", "联网取证：自动抓网络数据支撑 problem statement"),
-        feature3: tr("One-click asset composition: logo/name/demo capture to final video", "素材一键合成：Logo / 名字 / demo 录屏 → 成品视频"),
-      },
-      tech: {
-        stack: "Next.js 16 · Vercel AI SDK · Remotion · FAL · Postgres",
-      },
-      impact: {
-        impact: tr(
-          "Help every builder launch with the polish of a large company.",
-          "让每一个在车库里 ship 产品的人，都能像大厂一样体面地 launch。",
-        ),
-      },
+    setChatError(null);
+
+    const step = steps.find((s) => s.id === stepId);
+    if (!step) return;
+
+    const extractJsonObject = (raw: string): Record<string, unknown> | null => {
+      const fenced = raw.match(/```json\s*([\s\S]*?)```/i);
+      const candidate = fenced?.[1] ?? raw;
+      const start = candidate.indexOf("{");
+      const end = candidate.lastIndexOf("}");
+      if (start === -1 || end === -1 || end <= start) return null;
+      try {
+        return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
     };
-    const patch = suggestions[stepId];
-    setSteps((prev) =>
-      prev.map((s) =>
-        s.id === stepId
-          ? {
-              ...s,
-              fields: s.fields.map((f) => (patch[f.key] ? { ...f, value: patch[f.key] } : f)),
+
+    const escapeRegExp = (value: string): string =>
+      value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const cleanupValue = (value: string): string =>
+      value
+        .replace(/^[-*•\s]+/, "")
+        .replace(/\*\*/g, "")
+        .replace(/^["'`]|["'`,]$/g, "")
+        .trim();
+
+    const extractLooseFieldValues = (raw: string): Record<string, string> => {
+      const out: Record<string, string> = {};
+      const lines = raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      for (const field of step.fields) {
+        const keyPattern = new RegExp(
+          `^["'\`]?${escapeRegExp(field.key)}["'\`]?\\s*[:：]\\s*(.+)$`,
+          "i",
+        );
+        const labelPattern = new RegExp(
+          `^["'\`]?${escapeRegExp(field.label)}["'\`]?\\s*[:：]\\s*(.+)$`,
+          "i",
+        );
+
+        let hit = "";
+        for (const line of lines) {
+          const km = line.match(keyPattern);
+          if (km?.[1]) {
+            hit = cleanupValue(km[1]);
+            break;
+          }
+          const lm = line.match(labelPattern);
+          if (lm?.[1]) {
+            hit = cleanupValue(lm[1]);
+            break;
+          }
+        }
+
+        if (!hit) {
+          const inlineJsonLike = raw.match(
+            new RegExp(`"${escapeRegExp(field.key)}"\\s*:\\s*"([^"]+)"`, "i"),
+          );
+          if (inlineJsonLike?.[1]) {
+            hit = cleanupValue(inlineJsonLike[1]);
+          }
+        }
+
+        if (hit) out[field.key] = hit;
+      }
+
+      return out;
+    };
+
+    const pickChatContentText = (payload: unknown): string => {
+      const root = payload as {
+        choices?: Array<{
+          message?: {
+            content?: unknown;
+          };
+        }>;
+      };
+      const content = root?.choices?.[0]?.message?.content;
+      if (typeof content === "string") return content;
+      if (Array.isArray(content)) {
+        const joined = content
+          .map((part) => {
+            if (typeof part === "string") return part;
+            if (part && typeof part === "object" && "text" in part) {
+              const text = (part as { text?: unknown }).text;
+              return typeof text === "string" ? text : "";
             }
-          : s,
-      ),
-    );
-    setChat((c) => [
-      ...c,
-      {
-        role: "ai",
-        tag: `${tr("AI Suggestion", "AI 建议")} · ${steps.find((s) => s.id === stepId)?.title}`,
-        text: tr(
-          "I filled this step based on a common launch template. Feel free to edit anything.",
-          "我按常见模板帮你把这一步填了，可以直接编辑不满意的地方。",
+            return "";
+          })
+          .filter(Boolean)
+          .join("\n");
+        return joined;
+      }
+      return "";
+    };
+
+    const baseContext = {
+      targetUser: getFieldValue("audience", "user"),
+      problem: getFieldValue("audience", "problem"),
+      evidence: getFieldValue("importance", "evidence"),
+      productName: getFieldValue("product", "name"),
+      slogan: getFieldValue("product", "slogan"),
+      features: [
+        getFieldValue("features", "feature1"),
+        getFieldValue("features", "feature2"),
+        getFieldValue("features", "feature3"),
+      ],
+      techStack: getFieldValue("tech", "stack"),
+      impact: getFieldValue("impact", "impact"),
+    };
+
+    setChatLoading(true);
+    try {
+      const schemaLines = step.fields.map((f) => `  "${f.key}": "string"`).join(",\n");
+      const stepFieldLines = step.fields
+        .map((f) => `${f.key} | ${f.label} | current="${f.value || "(empty)"}" | placeholder="${f.placeholder}"`)
+        .join("\n");
+
+      const buildMessages = (forceJson = false) => [
+        {
+          role: "system",
+          content: [
+            tr(
+              "You are DemoDance copilot. Fill the requested step with practical, concrete launch-video copy.",
+              "你是 DemoDance 助手。请为指定步骤生成实用、具体的 launch 视频文案。",
+            ),
+            tr(
+              "Return strict JSON only, no markdown, no explanation.",
+              "只返回严格 JSON，不要 markdown，不要解释。",
+            ),
+            forceJson
+              ? tr(
+                  "IMPORTANT: Output must be a valid JSON object. Do not return empty output.",
+                  "重要：输出必须是合法 JSON 对象，禁止空输出。",
+                )
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+        {
+          role: "user",
+          content: [
+            `Language: ${isEn ? "English" : "Chinese"}`,
+            `Step: ${step.title}`,
+            "",
+            "JSON schema:",
+            "{",
+            schemaLines,
+            "}",
+            "",
+            "Step fields:",
+            stepFieldLines,
+            "",
+            "Project context:",
+            `targetUser=${baseContext.targetUser || "(empty)"}`,
+            `problem=${baseContext.problem || "(empty)"}`,
+            `evidence=${baseContext.evidence || "(empty)"}`,
+            `productName=${baseContext.productName || "(empty)"}`,
+            `slogan=${baseContext.slogan || "(empty)"}`,
+            `features=${baseContext.features.filter(Boolean).join(" | ") || "(empty)"}`,
+            `techStack=${baseContext.techStack || "(empty)"}`,
+            `impact=${baseContext.impact || "(empty)"}`,
+          ].join("\n"),
+        },
+      ];
+
+      let rawText = "";
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const resp = await fetch("/api/text/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            temperature: 0.4,
+            max_tokens: 420,
+            messages: buildMessages(attempt > 0),
+          }),
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(String((data as { error?: unknown })?.error || "AI suggest request failed"));
+        }
+
+        rawText = pickChatContentText(data).trim();
+        if (rawText) break;
+        console.log("[aiSuggest] empty raw output, retry attempt:", attempt + 1);
+      }
+
+      console.log("[aiSuggest] step:", stepId, step.title);
+      console.log("[aiSuggest] raw output preview:", rawText.slice(0, 800));
+
+      const strictParsed = extractJsonObject(rawText);
+      const looseParsed = strictParsed ? null : extractLooseFieldValues(rawText);
+      const parsed = strictParsed ?? looseParsed ?? {};
+
+      console.log("[aiSuggest] parse mode:", strictParsed ? "json" : "loose");
+      console.log("[aiSuggest] parsed keys:", Object.keys(parsed));
+
+      const patch: Record<string, string> = {};
+      for (const f of step.fields) {
+        const next = parsed[f.key];
+        const nextValue =
+          typeof next === "string"
+            ? next.trim()
+            : Array.isArray(next)
+              ? next.map((v) => String(v).trim()).filter(Boolean).join(" · ")
+              : "";
+        if (nextValue.length > 0) {
+          patch[f.key] = nextValue;
+        }
+      }
+      const appliedCount = Object.keys(patch).length;
+
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.id === stepId
+            ? {
+                ...s,
+                fields: s.fields.map((f) =>
+                  patch[f.key] ? { ...f, value: patch[f.key] } : f,
+                ),
+              }
+            : s,
         ),
-      },
-    ]);
+      );
+
+      console.log("[aiSuggest] applied field count:", appliedCount);
+      console.log("[aiSuggest] expected field keys:", step.fields.map((f) => f.key));
+
+      if (appliedCount === 0) {
+        throw new Error("AI suggest returned unparseable output");
+      }
+
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: `${tr("AI Suggestion", "AI 建议")} · ${step.title}`,
+          text: tr(
+            "Generated this step with LLM based on your current project context. Review and edit as needed.",
+            "已基于你当前项目上下文用 LLM 生成这一步内容。你可以继续微调。",
+          ),
+        },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setChatError(message);
+      setChat((c) => [
+        ...c,
+        {
+          role: "ai",
+          tag: tr("AI Suggest Failed", "AI 建议失败"),
+          text: tr(
+            `I couldn't generate this step just now (${message}). Please try again.`,
+            `这一步刚才生成失败（${message}），请重试。`,
+          ),
+        },
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
   }
 
   function summarizeStep(stepId: StepId): string {
@@ -750,7 +1055,7 @@ export default function Home() {
       .filter((v) => v.length > 0)
       .join(" · ");
     if (!text) return tr("No content yet", "暂无内容");
-    return text.length > 140 ? `${text.slice(0, 140)}...` : text;
+    return text;
   }
 
   function getRenderTitle(stepId: StepId): string {
@@ -774,19 +1079,115 @@ export default function Home() {
     }
   }
 
-  function getDefaultRenderSections(): RenderSection[] {
-    const ids: StepId[] = ["importance", "product", "features", "tech", "impact"];
-    return ids.map((id) => ({
-      id,
-      title: getRenderTitle(id),
-      status: "idle",
-      durationSec: getRenderDuration(id),
-      summary: summarizeStep(id),
-      version: 0,
-    }));
+  function buildSectionPrompt(sectionId: StepId, title: string, summary: string): string {
+    const cleanSummary = summary.trim().length > 0 ? summary : tr("No content yet", "暂无内容");
+    return [
+      `Section ID: ${sectionId}`,
+      `Section Title: ${title}`,
+      `Duration Target: ${getRenderDuration(sectionId)}s`,
+      "Instruction: Generate a concise launch-video section aligned with this context.",
+      `Content Summary: ${cleanSummary}`,
+    ].join("\n");
   }
 
-  async function generateOneSection(sectionId: StepId) {
+  function getDefaultRenderSections(): RenderSection[] {
+    const ids: StepId[] = ["importance", "product", "features", "tech", "impact"];
+    return ids.map((id) => {
+      const title = getRenderTitle(id);
+      const summary = summarizeStep(id);
+      return {
+        id,
+        title,
+        status: "idle",
+        durationSec: getRenderDuration(id),
+        summary,
+        prompt: buildSectionPrompt(id, title, summary),
+        version: 0,
+      };
+    });
+  }
+
+  function updateSectionPrompt(sectionId: StepId, prompt: string) {
+    setSectionRenders((prev) => {
+      const current = prev.length ? prev : getDefaultRenderSections();
+      return current.map((item) => (item.id === sectionId ? { ...item, prompt } : item));
+    });
+  }
+
+  function resetSectionPrompt(sectionId: StepId) {
+    setSectionRenders((prev) => {
+      const current = prev.length ? prev : getDefaultRenderSections();
+      return current.map((item) => {
+        if (item.id !== sectionId) return item;
+        const title = getRenderTitle(sectionId);
+        const summary = summarizeStep(sectionId);
+        return {
+          ...item,
+          title,
+          summary,
+          prompt: buildSectionPrompt(sectionId, title, summary),
+        };
+      });
+    });
+  }
+
+  async function cancelVideoTask(taskId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/video/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function stopSectionGeneration(sectionId: StepId) {
+    const section = sectionRenders.find((s) => s.id === sectionId);
+    if (!section?.taskId || section.status !== "generating") return;
+
+    const cancelled = await cancelVideoTask(section.taskId);
+    setSectionRenders((prev) =>
+      prev.map((item) =>
+        item.id === sectionId
+          ? {
+              ...item,
+              status: "idle",
+              apiState: cancelled ? "cancelled" : "cancel_failed",
+            }
+          : item,
+      ),
+    );
+  }
+
+  async function stopAllGeneration() {
+    stopGenerationRef.current = true;
+    const runningTasks = sectionRenders
+      .filter((s) => s.status === "generating" && s.taskId)
+      .map((s) => ({ id: s.id, taskId: s.taskId as string }));
+
+    await Promise.all(
+      runningTasks.map(async ({ taskId }) => {
+        await cancelVideoTask(taskId);
+      }),
+    );
+
+    setSectionRenders((prev) =>
+      prev.map((item) =>
+        item.status === "generating"
+          ? {
+              ...item,
+              status: "idle",
+              apiState: "cancelled",
+            }
+          : item,
+      ),
+    );
+    setRenderingAll(false);
+  }
+
+  async function generateOneSection(sectionId: StepId, apiPromptContext?: string) {
+    if (stopGenerationRef.current) return false;
     setSectionRenders((prev) => {
       const current = prev.length ? prev : getDefaultRenderSections();
       return current.map((item) =>
@@ -795,21 +1196,51 @@ export default function Home() {
               ...item,
               status: "generating",
               summary: summarizeStep(sectionId),
+              prompt:
+                item.prompt?.trim().length > 0
+                  ? item.prompt
+                  : buildSectionPrompt(sectionId, getRenderTitle(sectionId), summarizeStep(sectionId)),
             }
           : item,
       );
     });
 
-    try {
-      const title = getRenderTitle(sectionId);
-      const summary = summarizeStep(sectionId);
-      const prompt = `Section: ${title}\nContent: ${summary}`;
+    let succeeded = false;
+    let finalState = "idle";
 
-      const res = await fetch("/api/video/tasks", {
+    try {
+      const summary = summarizeStep(sectionId);
+      const currentSections = sectionRenders.length ? sectionRenders : getDefaultRenderSections();
+      const currentSection = currentSections.find((s) => s.id === sectionId);
+      const title = currentSection?.title ?? getRenderTitle(sectionId);
+      const prompt =
+        currentSection?.prompt?.trim() && currentSection.prompt.trim().length > 0
+          ? currentSection.prompt
+          : buildSectionPrompt(sectionId, title, summary);
+      const finalPrompt = apiPromptContext?.trim()
+        ? `${prompt}\n\nAdditional Prompt Context (from prompt APIs):\n${apiPromptContext}`
+        : prompt;
+
+      const targetDuration = currentSection?.durationSec ?? getRenderDuration(sectionId);
+
+      let res = await fetch("/api/video/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt: finalPrompt, duration: targetDuration }),
       });
+
+      if (!res.ok) {
+        console.warn("[video] create task with duration failed, retrying without duration", {
+          sectionId,
+          targetDuration,
+          status: res.status,
+        });
+        res = await fetch("/api/video/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: finalPrompt }),
+        });
+      }
 
       if (!res.ok) throw new Error("Failed to start video task");
 
@@ -821,6 +1252,11 @@ export default function Home() {
           prev.map((item) => (item.id === sectionId ? { ...item, taskId } : item))
         );
         while (true) {
+          if (stopGenerationRef.current) {
+            await cancelVideoTask(taskId);
+            finalState = "cancelled";
+            throw new Error("Video task cancelled by user");
+          }
           await new Promise((r) => setTimeout(r, 3000));
           const statusRes = await fetch(`/api/video/tasks/${taskId}`);
           const statusData = await statusRes.json();
@@ -846,13 +1282,20 @@ export default function Home() {
               return item;
             })
           );
-          if (state === "succeeded") break;
+          if (state === "succeeded") {
+            succeeded = true;
+            finalState = "succeeded";
+            break;
+          }
           if (state === "failed" || state === "cancelled") {
+            finalState = state;
             throw new Error(`Video task ${state}`);
           }
         }
       } else {
         await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 700));
+        succeeded = true;
+        finalState = "succeeded";
       }
     } catch (error) {
       console.error("Video generation error:", error);
@@ -865,27 +1308,54 @@ export default function Home() {
         item.id === sectionId
           ? {
               ...item,
-              status: "done",
+              status: succeeded ? "done" : "idle",
               durationSec: getRenderDuration(sectionId),
               summary: summarizeStep(sectionId),
-              version: item.version + 1,
+              prompt:
+                item.prompt?.trim().length > 0
+                  ? item.prompt
+                  : buildSectionPrompt(sectionId, getRenderTitle(sectionId), summarizeStep(sectionId)),
+              version: succeeded ? item.version + 1 : item.version,
+              apiState: succeeded ? "succeeded" : finalState,
             }
           : item,
       );
     });
+    return succeeded;
   }
 
   async function startSectionGeneration() {
+    stopGenerationRef.current = false;
     setExportReady(false);
     setExportFileName(null);
     setCombining(false);
     setRenderingAll(true);
-    setSectionRenders(getDefaultRenderSections());
+    setSectionRenders((prev) => {
+      if (!prev.length) return getDefaultRenderSections();
+      return prev.map((item) => {
+        const title = getRenderTitle(item.id);
+        const summary = summarizeStep(item.id);
+        return {
+          ...item,
+          title,
+          summary,
+          durationSec: getRenderDuration(item.id),
+          status: "idle",
+          prompt:
+            item.prompt?.trim().length > 0
+              ? item.prompt
+              : buildSectionPrompt(item.id, title, summary),
+        };
+      });
+    });
+
+    const apiPromptContext = await buildRenderApiPromptContext();
 
     const ids: StepId[] = ["importance", "product", "features", "tech", "impact"];
     for (const id of ids) {
+      if (stopGenerationRef.current) break;
       // eslint-disable-next-line no-await-in-loop
-      await generateOneSection(id);
+      await generateOneSection(id, apiPromptContext);
     }
 
     setRenderingAll(false);
@@ -895,7 +1365,8 @@ export default function Home() {
     if (renderingAll || combining) return;
     setExportReady(false);
     setExportFileName(null);
-    await generateOneSection(sectionId);
+    const apiPromptContext = await buildRenderApiPromptContext();
+    await generateOneSection(sectionId, apiPromptContext);
   }
 
   async function manualFetchStatus(sectionId: StepId) {
@@ -1005,6 +1476,104 @@ export default function Home() {
 
   function getFieldValue(stepId: StepId, fieldKey: string): string {
     return steps.find((s) => s.id === stepId)?.fields.find((f) => f.key === fieldKey)?.value ?? "";
+  }
+
+  function takePromptSnippet(raw: string, maxLen = 800): string {
+    const text = raw.trim();
+    if (!text) return "";
+    return text.length > maxLen ? text.slice(0, maxLen) : text;
+  }
+
+  async function buildRenderApiPromptContext(): Promise<string> {
+    const storyBody = {
+      includeTechnicalArchitecture: getFieldValue("tech", "stack").trim().length > 0,
+      user: getFieldValue("audience", "user"),
+      problem: getFieldValue("audience", "problem"),
+      evidence: getFieldValue("importance", "evidence"),
+      productName: getFieldValue("product", "name"),
+      slogan: getFieldValue("product", "slogan"),
+      features: [
+        getFieldValue("features", "feature1"),
+        getFieldValue("features", "feature2"),
+        getFieldValue("features", "feature3"),
+      ],
+      techStack: getFieldValue("tech", "stack"),
+      vision: getFieldValue("impact", "impact"),
+    };
+    const sceneBody = {
+      targetUser: getFieldValue("audience", "user"),
+      problem: getFieldValue("audience", "problem"),
+      evidence: getFieldValue("importance", "evidence"),
+      productName: getFieldValue("product", "name"),
+      slogan: getFieldValue("product", "slogan"),
+      features: [
+        getFieldValue("features", "feature1"),
+        getFieldValue("features", "feature2"),
+        getFieldValue("features", "feature3"),
+      ],
+      techStack: getFieldValue("tech", "stack"),
+      vision: getFieldValue("impact", "impact"),
+      deviceFrame: "desktop",
+    };
+    const voiceBody = {
+      includeTechnicalArchitecture: getFieldValue("tech", "stack").trim().length > 0,
+      targetUser: getFieldValue("audience", "user"),
+      problem: getFieldValue("audience", "problem"),
+      evidence: getFieldValue("importance", "evidence"),
+      productName: getFieldValue("product", "name"),
+      slogan: getFieldValue("product", "slogan"),
+      features: [
+        getFieldValue("features", "feature1"),
+        getFieldValue("features", "feature2"),
+        getFieldValue("features", "feature3"),
+      ],
+      techStack: getFieldValue("tech", "stack"),
+      vision: getFieldValue("impact", "impact"),
+    };
+
+    try {
+      const [storyResp, sceneResp, voiceResp] = await Promise.all([
+        fetch("/api/story/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(storyBody),
+        }),
+        fetch("/api/scene/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sceneBody),
+        }),
+        fetch("/api/voice/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(voiceBody),
+        }),
+      ]);
+
+      const parts: string[] = [];
+      if (storyResp.ok) {
+        const storyData = await storyResp.json();
+        const storyPrompt =
+          typeof storyData?.prompt === "string" ? takePromptSnippet(storyData.prompt, 900) : "";
+        if (storyPrompt) parts.push(`Story Prompt Snippet:\n${storyPrompt}`);
+      }
+      if (sceneResp.ok) {
+        const sceneData = await sceneResp.json();
+        const scenePrompt =
+          typeof sceneData?.prompt === "string" ? takePromptSnippet(sceneData.prompt, 700) : "";
+        if (scenePrompt) parts.push(`Scene Prompt Snippet:\n${scenePrompt}`);
+      }
+      if (voiceResp.ok) {
+        const voiceData = await voiceResp.json();
+        const voicePrompt =
+          typeof voiceData?.prompt === "string" ? takePromptSnippet(voiceData.prompt, 700) : "";
+        if (voicePrompt) parts.push(`Voice Prompt Snippet:\n${voicePrompt}`);
+      }
+      return parts.join("\n\n");
+    } catch (error) {
+      console.warn("[render] prompt API context unavailable:", error);
+      return "";
+    }
   }
 
   async function previewStoryPrompt() {
@@ -1185,6 +1754,7 @@ export default function Home() {
     ]
       .filter(Boolean)
       .join(" ");
+    setLastLogoPrompt(prompt);
 
     try {
       const response = await fetch("/api/images/generations", {
@@ -1244,6 +1814,10 @@ export default function Home() {
   const allDone = progress.every((p) => p.status === "done");
   const allSectionsDone =
     sectionRenders.length === 5 && sectionRenders.every((section) => section.status === "done");
+  const displaySections = sectionRenders.length > 0 ? sectionRenders : getDefaultRenderSections();
+  const activeSectionPrompt = activeSectionPromptId
+    ? displaySections.find((section) => section.id === activeSectionPromptId) ?? null
+    : null;
   const stepOrder: StepId[] = ["audience", "importance", "product", "features", "tech", "impact"];
   const activeStepIndex = stepOrder.indexOf(activeStepId);
   const prevStepId = activeStepIndex > 0 ? stepOrder[activeStepIndex - 1] : null;
@@ -1269,6 +1843,13 @@ export default function Home() {
         }}
         onStart={handleStart}
         onSkip={() => {
+          saveWorkflowDraft({
+            steps,
+            activeStepId,
+            chat,
+            projectName,
+            submission,
+          });
           setStage("workflow");
           if (pathname !== "/workflow") {
             router.push("/workflow");
@@ -1405,15 +1986,28 @@ export default function Home() {
                                   e.stopPropagation();
                                   setPreviewSegment(f.segment!);
                                 }}
-                                className="relative shrink-0 w-28 h-16 rounded-md overflow-hidden group"
-                                style={{
-                                  background: `linear-gradient(135deg, ${f.segment.accent} 0%, rgba(0,0,0,0.85) 100%)`,
-                                }}
+                                className="relative shrink-0 w-28 h-16 rounded-md overflow-hidden group bg-black"
                                 title={tr("Play this segment", "播放该片段")}
                               >
-                                <div className="absolute inset-0 flex items-center justify-center text-xl">
-                                  {f.segment.emoji}
-                                </div>
+                                {f.segment.clipUrl ? (
+                                  <video
+                                    src={f.segment.clipUrl}
+                                    muted
+                                    playsInline
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div
+                                    className="absolute inset-0"
+                                    style={{
+                                      background: `linear-gradient(135deg, ${f.segment.accent} 0%, rgba(0,0,0,0.85) 100%)`,
+                                    }}
+                                  >
+                                    <div className="absolute inset-0 flex items-center justify-center text-xl">
+                                      {f.segment.emoji}
+                                    </div>
+                                  </div>
+                                )}
                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition">
                                   <div className="w-7 h-7 rounded-full bg-white/90 text-black flex items-center justify-center text-xs">
                                     ▶
@@ -1432,13 +2026,25 @@ export default function Home() {
                               />
                             </div>
                           ) : (
-                            <textarea
-                              value={f.value}
-                              onChange={(e) => updateField(s.id, f.key, e.target.value)}
-                              placeholder={f.placeholder}
-                              rows={f.value.length > 60 ? 3 : 1}
-                              className="w-full bg-transparent text-[13px] text-zinc-800 resize-none focus:outline-none placeholder:text-zinc-300"
-                            />
+                            <div>
+                              <textarea
+                                value={f.value}
+                                onChange={(e) => updateField(s.id, f.key, e.target.value)}
+                                placeholder={f.placeholder}
+                                rows={f.value.length > 60 ? 3 : 1}
+                                className="w-full bg-transparent text-[13px] text-zinc-800 resize-none focus:outline-none placeholder:text-zinc-300"
+                              />
+                              {s.id === "product" && f.key === "logo" && lastLogoPrompt && (
+                                <details className="mt-2 rounded border border-zinc-200 bg-white p-2">
+                                  <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-zinc-500">
+                                    {tr("Logo Prompt", "Logo Prompt")}
+                                  </summary>
+                                  <pre className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-700">
+                                    {lastLogoPrompt}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
                           )}
                         </div>
                       ))}
@@ -1506,11 +2112,21 @@ export default function Home() {
                     ? tr("Generating...", "生成中...")
                     : tr("Start Generate Video", "开始生成视频")}
                 </button>
+                <button
+                  onClick={stopAllGeneration}
+                  disabled={!renderingAll}
+                  className={`text-xs px-3 py-1.5 rounded font-medium ${
+                    renderingAll
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
+                  }`}
+                >
+                  {tr("Stop", "停止")}
+                </button>
               </div>
 
-              {sectionRenders.length > 0 && (
-                <div className="mt-4 grid gap-3">
-                  {sectionRenders.map((section) => (
+              <div className="mt-4 grid gap-3">
+                {displaySections.map((section) => (
                     <div
                       key={section.id}
                       className="border border-zinc-200 rounded-lg p-3 bg-zinc-50/70"
@@ -1547,6 +2163,18 @@ export default function Home() {
                       <div className="text-[12px] text-zinc-700 mt-2">{section.summary}</div>
                       <div className="mt-3 flex items-center gap-2">
                         <button
+                          onClick={() => setActiveSectionPromptId(section.id)}
+                          className="text-xs px-2.5 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
+                        >
+                          {tr("Preview Prompt", "预览 Prompt")}
+                        </button>
+                        <button
+                          onClick={() => resetSectionPrompt(section.id)}
+                          className="text-xs px-2.5 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
+                        >
+                          {tr("Reset Prompt", "重置 Prompt")}
+                        </button>
+                        <button
                           onClick={() => regenerateSection(section.id)}
                           disabled={renderingAll || combining || section.status === "generating"}
                           className={`text-xs px-2.5 py-1 rounded border ${
@@ -1560,12 +2188,20 @@ export default function Home() {
                             : tr("Generate", "生成")}
                         </button>
                         {section.status === "generating" && (
-                          <button
-                            onClick={() => manualFetchStatus(section.id)}
-                            className="text-xs px-2.5 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
-                          >
-                            {tr("Manual Fetch", "手动刷新进度")}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => manualFetchStatus(section.id)}
+                              className="text-xs px-2.5 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
+                            >
+                              {tr("Manual Fetch", "手动刷新进度")}
+                            </button>
+                            <button
+                              onClick={() => stopSectionGeneration(section.id)}
+                              className="text-xs px-2.5 py-1 rounded border border-red-300 text-red-700 hover:bg-red-50"
+                            >
+                              {tr("Stop", "停止")}
+                            </button>
+                          </>
                         )}
                         {section.status === "done" && (
                           <>
@@ -1599,9 +2235,8 @@ export default function Home() {
                         )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                ))}
+              </div>
 
               <div className="mt-4 pt-4 border-t border-zinc-200 flex items-center gap-2">
                 <button
@@ -1650,7 +2285,6 @@ export default function Home() {
       <SegmentPreviewModal
         segment={previewSegment}
         demoVideo={demoVideo}
-        previewVideoRef={previewVideoRef}
         formatTime={formatTime}
         tr={tr}
         onClose={() => setPreviewSegment(null)}
@@ -1673,6 +2307,26 @@ export default function Home() {
         content={scenePromptPreview}
         sources={scenePromptSources}
         onClose={() => setScenePromptPreview(null)}
+      />
+      <SectionPromptModal
+        open={Boolean(activeSectionPrompt)}
+        title={
+          activeSectionPrompt
+            ? tr(`${activeSectionPrompt.title} · Prompt`, `${activeSectionPrompt.title} · Prompt`)
+            : ""
+        }
+        value={activeSectionPrompt?.prompt ?? ""}
+        resetLabel={tr("Reset Prompt", "重置 Prompt")}
+        closeLabel={tr("Done", "完成")}
+        onChange={(next) => {
+          if (!activeSectionPrompt) return;
+          updateSectionPrompt(activeSectionPrompt.id, next);
+        }}
+        onReset={() => {
+          if (!activeSectionPrompt) return;
+          resetSectionPrompt(activeSectionPrompt.id);
+        }}
+        onClose={() => setActiveSectionPromptId(null)}
       />
 
       <PromptErrorToast

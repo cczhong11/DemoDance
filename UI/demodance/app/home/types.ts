@@ -9,6 +9,7 @@ export type FeatureSegment = {
   accent: string;
   emoji: string;
   caption: string;
+  clipUrl?: string;
 };
 
 export type Field = {
@@ -41,6 +42,7 @@ export type RenderSection = {
   status: RenderStatus;
   durationSec: number;
   summary: string;
+  prompt: string;
   version: number;
   progress?: number;
   apiState?: string;
