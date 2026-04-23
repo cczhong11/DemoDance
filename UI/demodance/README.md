@@ -13,6 +13,42 @@ npm run dev
 
 App runs at `http://localhost:3000`.
 
+## Current UX Overview (当前 UX 介绍)
+
+DemoDance 当前体验是一个从 `raw demo` 到 `launch video` 的单页流程，默认分为两段：
+
+1. Onboarding（素材输入）
+   - 用户先贴入 Hackathon 提交文本（建议 20+ 字）并可选上传原始 demo 视频。
+   - 支持中英文切换（EN / 中文），文案和字段占位符同步切换。
+   - 点击 `Let AI draft the script` 后，系统会尝试用文本 + 视频分析结果自动预填后续步骤；如果分析失败，仍可手动继续。
+
+2. Workflow（脚本与生成）
+   - 左侧是 6 步脚本卡片：
+     1) 目标用户与问题
+     2) 问题重要性（联网证据）
+     3) 产品亮相（Logo/Name/Slogan）
+     4) 功能介绍
+     5) 技术栈
+     6) 未来影响
+   - 每一步都可手动编辑，也可点击 `AI Suggest` 让模型定向补全。
+   - 顶部有步骤完成度、前后步导航、项目名编辑；全部完成后可一键跳转到生成区。
+
+3. 右侧 AI 协作栏
+   - 常驻聊天侧栏会绑定“当前步骤”上下文，支持对话式改写。
+   - 支持 `Enter` 发送、`Shift+Enter` 换行。
+   - 在 Product 步骤可一键生成 Logo（写回对应字段）。
+
+4. 视频生成与导出
+   - 底部生成面板按 5 个章节分段出片（可单段生成/重生成/预览/下载）。
+   - 每段显示状态（waiting / generating / done）、进度和时长目标。
+   - 全部分段完成后可 `Combine & Export` 合成为最终 MP4 并下载。
+
+5. 当前 UX 特点
+   - 渐进式流程：先可用，再自动化增强（AI 失败时不阻塞主路径）。
+   - 双语一致性：关键操作、字段、提示都支持中英切换。
+   - 可控性：支持逐段重试、Prompt 预览/重置、片段预览，便于调参与回看。
+
+
 ## Database (Butterbase)
 
 DemoDance uses Butterbase as the project data store.
@@ -193,23 +229,10 @@ curl -X POST http://localhost:3000/api/images/generations \
   -H "Content-Type: application/json" \
   -d '{
     "prompt":"Vibrant close-up editorial portrait, dramatic studio lighting.",
-    "size":"1K",
-    "aspect_ratio":"1:1"
-  }'
-```
-
-### Image-to-image
-
-```bash
-curl -X POST http://localhost:3000/api/images/generations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt":"Keep pose unchanged and transform clothing into clear water.",
-    "image":"https://ark-doc.tos-ap-southeast-1.bytepluses.com/doc_image/seedream4_5_imageToimage.png",
-    "size":"2K",
-    "output_format":"png",
-    "response_format":"url",
-    "watermark":false
+    "model":"gpt-image-2",
+    "size":"1024x1024",
+    "quality":"medium",
+    "output_format":"png"
   }'
 ```
 
@@ -252,10 +275,14 @@ curl -X POST http://localhost:3000/api/ffmpeg_understand \
   - `video_url` (public URL)
   - `video_url` as Base64 data URL
 - `POST /api/images/generations` supports:
-  - Google GenAI image generation via `@google/genai`
-  - text-to-image (`prompt`)
-  - optional Base64 data URL image input (`image`) for edit-style prompts
-  - env vars: `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), optional `GEMINI_IMAGE_MODEL`
+  - OpenAI text-to-image via `POST /v1/images/generations`
+  - default model: `gpt-image-2` (override with `model` or env `OPENAI_IMAGE_MODEL`)
+  - required: `prompt`
+  - optional: `size`, `quality`, `background`, `output_format`, `n`
+  - backward-compatible input mapping:
+    - `size: "1K"/"2K"/"4K"` + `aspect_ratio` will be mapped to OpenAI-compatible size
+    - `image` input is ignored with warnings (no edit input on this endpoint)
+  - env vars: `OPENAI_API_KEY`, optional `OPENAI_IMAGE_MODEL`
 - `POST /api/ffmpeg_understand`:
   - Requires `ffmpeg` installed on server
   - Accepts JSON `video_url` or multipart `file`

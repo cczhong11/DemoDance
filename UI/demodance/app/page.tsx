@@ -1763,6 +1763,36 @@ export default function Home() {
       .join(" ");
     setLastLogoPrompt(prompt);
 
+    async function shrinkLogoImage(inputUrl: string, maxSize = 256): Promise<string> {
+      try {
+        const response = await fetch(inputUrl);
+        if (!response.ok) return inputUrl;
+        const blob = await response.blob();
+        const bitmap = await createImageBitmap(blob);
+
+        const longestEdge = Math.max(bitmap.width, bitmap.height);
+        if (!Number.isFinite(longestEdge) || longestEdge <= maxSize) {
+          return inputUrl;
+        }
+
+        const scale = maxSize / longestEdge;
+        const width = Math.max(1, Math.round(bitmap.width * scale));
+        const height = Math.max(1, Math.round(bitmap.height * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return inputUrl;
+
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        const compressed = canvas.toDataURL("image/webp", 0.88);
+        return compressed || inputUrl;
+      } catch {
+        return inputUrl;
+      }
+    }
+
     try {
       const response = await fetch("/api/images/generations", {
         method: "POST",
@@ -1786,7 +1816,8 @@ export default function Home() {
         throw new Error("No logo image returned");
       }
 
-      updateField("product", "logo", logoUrl);
+      const compactLogoUrl = await shrinkLogoImage(logoUrl, 256);
+      updateField("product", "logo", compactLogoUrl);
       setActiveStepId("product");
       setChat((c) => [
         ...c,
@@ -1794,8 +1825,8 @@ export default function Home() {
           role: "ai",
           tag: tr("Logo Generated", "Logo 已生成"),
           text: tr(
-            "Generated a new logo with Google GenAI and filled Product → Logo.",
-            "已用 Google GenAI 生成新 Logo，并写入 Product → Logo。",
+            "Generated a new logo with OpenAI gpt-image-2, auto-compressed it, and filled Product → Logo.",
+            "已用 OpenAI gpt-image-2 生成新 Logo，并自动压缩后写入 Product → Logo。",
           ),
         },
       ]);

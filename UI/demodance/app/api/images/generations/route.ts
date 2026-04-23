@@ -1,61 +1,67 @@
-import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 
-import { getGoogleGenAIConfig } from "@/lib/server/config";
-import { jsonError, readJsonBody } from "@/lib/server/http";
+import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
-type InlineImage = {
-  mimeType: string;
-  data: string;
-};
-
-function parseDataUrl(value: string): InlineImage | null {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
-  if (!match) return null;
-  return {
-    mimeType: match[1],
-    data: match[2],
-  };
+function normalizeModel(value: unknown, fallback: string): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return fallback;
+  const lower = raw.toLowerCase();
+  if (lower === "image2" || lower === "image-2") return "gpt-image-2";
+  return raw;
 }
 
-function extractInlineImagesFromResponse(response: unknown): Array<{ mimeType: string; data: string }> {
-  const candidates = (response as { candidates?: Array<{ content?: { parts?: Array<Record<string, unknown>> } }> })
-    ?.candidates;
-  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+function mapImageSize(rawSize: unknown, rawAspectRatio: unknown): string | undefined {
+  const size = typeof rawSize === "string" ? rawSize.trim().toUpperCase() : "";
+  const aspectRatio = typeof rawAspectRatio === "string" ? rawAspectRatio.trim() : "";
 
-  const parts = candidates[0]?.content?.parts;
-  if (!Array.isArray(parts)) return [];
+  if (typeof rawSize === "string" && /^\d+x\d+$/i.test(rawSize.trim())) {
+    const normalized = rawSize.trim().toLowerCase();
+    const [w, h] = normalized.split("x").map((v) => Number.parseInt(v, 10));
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+      return undefined;
+    }
+    // gpt-image-2 rejects very small resolutions; upscale tiny requests to a safe minimum.
+    if (w < 1024 || h < 1024) {
+      if (w > h) return "1536x1024";
+      if (h > w) return "1024x1536";
+      return "1024x1024";
+    }
+    return normalized;
+  }
 
-  return parts
-    .map((part) => {
-      const inlineData = part.inlineData as { mimeType?: unknown; data?: unknown } | undefined;
-      if (!inlineData) return null;
-      if (typeof inlineData.mimeType !== "string" || typeof inlineData.data !== "string") return null;
-      return { mimeType: inlineData.mimeType, data: inlineData.data };
-    })
-    .filter((item): item is { mimeType: string; data: string } => Boolean(item));
+  const isPortrait = aspectRatio === "9:16";
+  const isLandscape = aspectRatio === "16:9";
+
+  if (size === "1K" || size === "1024" || size === "") {
+    if (isPortrait) return "1024x1536";
+    if (isLandscape) return "1536x1024";
+    return "1024x1024";
+  }
+
+  if (size === "2K" || size === "2048" || size === "4K" || size === "4096") {
+    if (isPortrait) return "1024x1536";
+    if (isLandscape) return "1536x1024";
+    return "1536x1024";
+  }
+
+  return undefined;
 }
 
-function extractTextFromResponse(response: unknown): string {
-  const candidates = (response as { candidates?: Array<{ content?: { parts?: Array<Record<string, unknown>> } }> })
-    ?.candidates;
-  if (!Array.isArray(candidates) || candidates.length === 0) return "";
-  const parts = candidates[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts
-    .map((part) => (typeof part.text === "string" ? part.text : ""))
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+function getMimeTypeFromOutputFormat(value: unknown): string {
+  const format = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (format === "jpeg" || format === "jpg") return "image/jpeg";
+  if (format === "webp") return "image/webp";
+  return "image/png";
 }
 
 export async function POST(request: Request) {
-  const config = getGoogleGenAIConfig();
-  if (!config.apiKey) {
-    return jsonError("GEMINI_API_KEY (or GOOGLE_API_KEY) is not set", 500);
+  const openaiApiKey = process.env.OPENAI_API_KEY ?? "";
+  const defaultImageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
+
+  if (!openaiApiKey) {
+    return jsonError("OPENAI_API_KEY is not set", 500);
   }
 
   const data = await readJsonBody(request);
@@ -64,65 +70,81 @@ export async function POST(request: Request) {
     return jsonError("'prompt' is required", 400);
   }
 
-  const model = typeof data.model === "string" && data.model.trim() ? data.model.trim() : config.defaultImageModel;
-  const aspectRatio = typeof data.aspect_ratio === "string" ? data.aspect_ratio.trim() : undefined;
-  const imageSize = typeof data.size === "string" ? data.size.trim() : undefined;
-  const images = Array.isArray(data.image) ? data.image : data.image ? [data.image] : [];
+  const model = normalizeModel(data.model, defaultImageModel);
+  const size = mapImageSize(data.size, data.aspect_ratio);
+  const quality = typeof data.quality === "string" && data.quality.trim() ? data.quality.trim() : undefined;
+  const background = typeof data.background === "string" && data.background.trim() ? data.background.trim() : undefined;
+  const outputFormat =
+    typeof data.output_format === "string" && data.output_format.trim() ? data.output_format.trim() : undefined;
+  const nRaw = Number.parseInt(String(data.n ?? "1"), 10);
+  const n = Number.isFinite(nRaw) && nRaw > 0 ? Math.min(nRaw, 10) : 1;
 
-  const contentParts: Array<Record<string, unknown>> = [{ text: prompt }];
-  let droppedImageInputs = 0;
-  for (const image of images) {
-    if (typeof image !== "string") continue;
-    const parsed = parseDataUrl(image);
-    if (parsed) {
-      contentParts.push({
-        inlineData: {
-          mimeType: parsed.mimeType,
-          data: parsed.data,
-        },
-      });
-    } else {
-      droppedImageInputs += 1;
-    }
-  }
+  const images = Array.isArray(data.image) ? data.image : data.image ? [data.image] : [];
+  const ignoredImageInputs = images.filter((img) => Boolean(img)).length;
+
+  const upstreamPayload: Record<string, unknown> = {
+    model,
+    prompt,
+    n,
+  };
+  if (size) upstreamPayload.size = size;
+  if (quality) upstreamPayload.quality = quality;
+  if (background) upstreamPayload.background = background;
+  if (outputFormat) upstreamPayload.output_format = outputFormat;
 
   try {
-    const ai = new GoogleGenAI({ apiKey: config.apiKey });
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ role: "user", parts: contentParts }],
-      config: {
-        responseModalities: ["TEXT", "IMAGE"],
-        imageConfig: {
-          ...(aspectRatio ? { aspectRatio } : {}),
-          ...(imageSize ? { imageSize } : {}),
-        },
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiApiKey}`,
       },
+      body: JSON.stringify(upstreamPayload),
     });
 
-    const inlineImages = extractInlineImagesFromResponse(response);
-    if (inlineImages.length === 0) {
-      return jsonError("Google GenAI did not return image data", 502, extractTextFromResponse(response) || undefined);
+    if (!response.ok) {
+      const details = await readResponseDetails(response);
+      return jsonError("OpenAI image generation API request failed", response.status, details);
     }
 
-    const text = extractTextFromResponse(response);
+    const raw = (await response.json()) as {
+      created?: number;
+      data?: Array<{ b64_json?: string; url?: string }>;
+      model?: string;
+    };
+    const mimeType = getMimeTypeFromOutputFormat(outputFormat);
+    const mappedData = Array.isArray(raw.data)
+      ? raw.data
+          .map((item) => {
+            const b64 = typeof item.b64_json === "string" ? item.b64_json : "";
+            const url = typeof item.url === "string" ? item.url : b64 ? `data:${mimeType};base64,${b64}` : "";
+            if (!url && !b64) return null;
+            return {
+              b64_json: b64 || undefined,
+              mime_type: mimeType,
+              url,
+            };
+          })
+          .filter((item): item is { b64_json?: string; mime_type: string; url: string } => Boolean(item))
+      : [];
+
+    if (mappedData.length === 0) {
+      return jsonError("OpenAI did not return image data", 502);
+    }
+
     return NextResponse.json({
-      created: Math.floor(Date.now() / 1000),
-      model,
-      data: inlineImages.map((img) => ({
-        b64_json: img.data,
-        mime_type: img.mimeType,
-        url: `data:${img.mimeType};base64,${img.data}`,
-      })),
-      text,
+      created: typeof raw.created === "number" ? raw.created : Math.floor(Date.now() / 1000),
+      model: typeof raw.model === "string" ? raw.model : model,
+      data: mappedData,
       warnings:
-        droppedImageInputs > 0
-          ? [`Ignored ${droppedImageInputs} image input(s) that were not Base64 data URLs.`]
+        ignoredImageInputs > 0
+          ? [
+              `Ignored ${ignoredImageInputs} image input(s): OpenAI text-to-image endpoint does not accept image edit inputs.`,
+            ]
           : undefined,
     });
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
-    return jsonError("Google GenAI image generation request failed", 502, details);
+    return jsonError("OpenAI image generation API unavailable", 502, details);
   }
 }
-

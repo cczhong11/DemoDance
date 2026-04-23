@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Image from "next/image";
 import { useLocale } from "../locale-provider";
 
 type ApiResult = {
@@ -78,6 +79,10 @@ export default function ApiTestPage() {
   const [imageWatermark, setImageWatermark] = useState(false);
   const [imageResponseFormat, setImageResponseFormat] = useState("url");
   const [imageGenerationResult, setImageGenerationResult] = useState<ApiResult | null>(null);
+  const [logoProjectName, setLogoProjectName] = useState("DemoDance");
+  const [logoTagline, setLogoTagline] = useState("Make Ideas Dance.");
+  const [logoAudience, setLogoAudience] = useState("hackathon builders");
+  const [smallLogoResult, setSmallLogoResult] = useState<ApiResult | null>(null);
   const [ffmpegInputType, setFfmpegInputType] = useState<"video_url" | "file">("video_url");
   const [ffmpegVideoUrl, setFfmpegVideoUrl] = useState("https://ark-doc.tos-ap-southeast-1.bytepluses.com/video_understanding.mp4");
   const [ffmpegFile, setFfmpegFile] = useState<File | null>(null);
@@ -315,6 +320,32 @@ export default function ApiTestPage() {
 
     const result = await callJsonApi("POST", "/api/images/generations", payload);
     setImageGenerationResult(result);
+  }
+
+  async function testSmallLogoGeneration(event: FormEvent) {
+    event.preventDefault();
+
+    const prompt = [
+      `Create a clean, modern app logo for a product named "${logoProjectName.trim() || "DemoDance"}".`,
+      logoTagline.trim() ? `Tagline/context: ${logoTagline.trim()}.` : "",
+      logoAudience.trim() ? `Target users: ${logoAudience.trim()}.` : "",
+      "Style: minimal, bold, high contrast, icon-first mark with transparent-like simple background.",
+      "No complex text blocks. Avoid photorealism.",
+      "Square composition, suitable for product launch page.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const result = await callJsonApi("POST", "/api/images/generations", {
+      prompt,
+      model: "gpt-image-2",
+      size: "1024x1024",
+      quality: "low",
+      output_format: "webp",
+      n: 1,
+    });
+
+    setSmallLogoResult(result);
   }
 
   async function testFfmpegUnderstand(event: FormEvent) {
@@ -759,9 +790,102 @@ export default function ApiTestPage() {
           </form>
 
           {imageGenerationResult && (
-            <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
+            <>
+              {(() => {
+                const body = imageGenerationResult.body as {
+                  data?: Array<{ url?: string; b64_json?: string; mime_type?: string }>;
+                } | undefined;
+                const previews = (body?.data ?? [])
+                  .map((item) => {
+                    if (typeof item.url === "string" && item.url.trim()) return item.url.trim();
+                    if (typeof item.b64_json === "string" && item.b64_json.trim()) {
+                      const mime = typeof item.mime_type === "string" && item.mime_type.trim() ? item.mime_type : "image/png";
+                      return `data:${mime};base64,${item.b64_json.trim()}`;
+                    }
+                    return "";
+                  })
+                  .filter(Boolean);
+
+                if (previews.length === 0) return null;
+                return (
+                  <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
+                    <p className="text-xs text-zinc-400 mb-2">{tr("Preview", "预览")}</p>
+                    <div className="flex flex-wrap gap-3">
+                      {previews.map((src, idx) => (
+                        <Image
+                          key={`${idx}-${src.slice(0, 24)}`}
+                          src={src}
+                          alt={`generated image ${idx + 1}`}
+                          width={120}
+                          height={120}
+                          unoptimized
+                          className="h-[120px] w-[120px] rounded-md border border-zinc-700 bg-zinc-800 object-cover"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
 {`status: ${imageGenerationResult.status}\n${pretty(imageGenerationResult.body)}`}
-            </pre>
+              </pre>
+            </>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 p-5 space-y-4">
+          <h2 className="text-xl font-medium">{tr("Small Logo (OpenAI)", "小尺寸 Logo（OpenAI）")}</h2>
+          <form onSubmit={testSmallLogoGeneration} className="space-y-3">
+            <input
+              value={logoProjectName}
+              onChange={(e) => setLogoProjectName(e.target.value)}
+              className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder={tr("Project name", "项目名")}
+            />
+            <input
+              value={logoTagline}
+              onChange={(e) => setLogoTagline(e.target.value)}
+              className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder={tr("Tagline (optional)", "标语（可选）")}
+            />
+            <input
+              value={logoAudience}
+              onChange={(e) => setLogoAudience(e.target.value)}
+              className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2"
+              placeholder={tr("Target audience (optional)", "目标用户（可选）")}
+            />
+            <p className="text-xs text-zinc-400">
+              {tr("Fixed payload: model=gpt-image-2, size=1024x1024, quality=low, output_format=webp", "固定参数：model=gpt-image-2, size=1024x1024, quality=low, output_format=webp")}
+            </p>
+            <button type="submit" className="rounded-md bg-violet-500 hover:bg-violet-400 text-zinc-950 px-4 py-2 font-medium">
+              {tr("Test small logo API", "测试小尺寸 Logo API")}
+            </button>
+          </form>
+
+          {smallLogoResult && (
+            <>
+              {(() => {
+                const body = smallLogoResult.body as { data?: Array<{ url?: string }> } | undefined;
+                const previewUrl = body?.data?.[0]?.url ?? "";
+                if (!previewUrl) return null;
+                return (
+                  <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
+                    <p className="text-xs text-zinc-400 mb-2">{tr("Preview", "预览")}</p>
+                    <Image
+                      src={previewUrl}
+                      alt="small logo preview"
+                      width={64}
+                      height={64}
+                      unoptimized
+                      className="h-16 w-16 rounded-md border border-zinc-700 bg-zinc-800 object-contain"
+                    />
+                  </div>
+                );
+              })()}
+              <pre className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs overflow-x-auto">
+{`status: ${smallLogoResult.status}\n${pretty(smallLogoResult.body)}`}
+              </pre>
+            </>
           )}
         </section>
 
