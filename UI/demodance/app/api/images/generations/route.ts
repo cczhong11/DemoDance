@@ -114,18 +114,18 @@ export async function POST(request: Request) {
     };
     const mimeType = getMimeTypeFromOutputFormat(outputFormat);
     const mappedData = Array.isArray(raw.data)
-      ? raw.data
-          .map((item) => {
-            const b64 = typeof item.b64_json === "string" ? item.b64_json : "";
-            const url = typeof item.url === "string" ? item.url : b64 ? `data:${mimeType};base64,${b64}` : "";
-            if (!url && !b64) return null;
-            return {
+      ? raw.data.flatMap((item) => {
+          const b64 = typeof item.b64_json === "string" ? item.b64_json : "";
+          const url = typeof item.url === "string" ? item.url : b64 ? `data:${mimeType};base64,${b64}` : "";
+          if (!url && !b64) return [];
+          return [
+            {
               b64_json: b64 || undefined,
               mime_type: mimeType,
               url,
-            };
-          })
-          .filter((item): item is { b64_json?: string; mime_type: string; url: string } => Boolean(item))
+            },
+          ];
+        })
       : [];
 
     if (mappedData.length === 0) {

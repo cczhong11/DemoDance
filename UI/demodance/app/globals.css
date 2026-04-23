@@ -38,8 +38,9 @@
 body {
   min-height: 100vh;
   background:
-    radial-gradient(1200px 600px at 12% -10%, rgba(73, 102, 255, 0.16), transparent 52%),
-    radial-gradient(900px 520px at 88% -8%, rgba(124, 92, 255, 0.14), transparent 48%),
+    radial-gradient(1280px 640px at 8% -12%, rgba(73, 102, 255, 0.18), transparent 56%),
+    radial-gradient(980px 560px at 84% -10%, rgba(124, 92, 255, 0.16), transparent 50%),
+    linear-gradient(180deg, rgba(8, 12, 24, 0.44) 0%, rgba(6, 11, 20, 0.84) 28%, rgba(6, 11, 20, 1) 100%),
     var(--dd-bg-base);
   color: var(--dd-text-primary);
   font-family:
@@ -53,14 +54,20 @@ body {
 }
 
 .dd-card {
-  background: linear-gradient(180deg, rgba(19, 29, 49, 0.72) 0%, rgba(15, 23, 40, 0.92) 100%);
+  background:
+    linear-gradient(180deg, rgba(28, 40, 66, 0.26) 0%, rgba(18, 27, 45, 0.16) 100%),
+    linear-gradient(180deg, rgba(19, 29, 49, 0.72) 0%, rgba(15, 23, 40, 0.92) 100%);
   border: var(--dd-border-default);
-  box-shadow: var(--dd-shadow-card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    var(--dd-shadow-card);
   border-radius: 16px;
 }
 
 .dd-card-subtle {
-  background: rgba(19, 29, 49, 0.55);
+  background:
+    linear-gradient(180deg, rgba(29, 41, 65, 0.24) 0%, rgba(16, 23, 38, 0.24) 100%),
+    rgba(19, 29, 49, 0.55);
   border: var(--dd-border-default);
   border-radius: 12px;
 }
@@ -71,6 +78,7 @@ body {
   border: var(--dd-border-default);
   background: rgba(8, 14, 28, 0.86);
   color: var(--dd-text-primary);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .dd-input::placeholder {
@@ -89,6 +97,7 @@ body {
   border: var(--dd-border-default);
   background: rgba(8, 14, 28, 0.86);
   color: var(--dd-text-primary);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .dd-btn-primary {
@@ -98,6 +107,7 @@ body {
   border: 1px solid rgba(124, 92, 255, 0.62);
   box-shadow: 0 8px 20px rgba(92, 84, 255, 0.32);
   transition: transform 90ms ease, filter 120ms ease;
+  font-weight: 600;
 }
 
 .dd-btn-primary:hover {
@@ -114,6 +124,7 @@ body {
   background: rgba(19, 29, 49, 0.56);
   color: var(--dd-text-secondary);
   transition: border-color 120ms ease, background-color 120ms ease;
+  font-weight: 500;
 }
 
 .dd-btn-secondary:hover {
@@ -123,10 +134,42 @@ body {
 
 .dd-pill-active {
   border: var(--dd-border-active);
-  background: linear-gradient(180deg, rgba(77, 62, 170, 0.48) 0%, rgba(54, 43, 122, 0.42) 100%);
+  background:
+    linear-gradient(180deg, rgba(127, 104, 255, 0.22) 0%, rgba(79, 62, 172, 0.26) 42%, rgba(54, 43, 122, 0.38) 100%),
+    rgba(19, 29, 49, 0.48);
   box-shadow: var(--dd-shadow-glow);
 }
 
 .dd-transition {
   transition: all 180ms ease;
+}
+
+.dd-sidebar {
+  background:
+    radial-gradient(460px 180px at 90% 0, rgba(98, 114, 255, 0.18), transparent 70%),
+    linear-gradient(180deg, rgba(17, 25, 43, 0.84) 0%, rgba(13, 20, 36, 0.95) 100%);
+  border: 1px solid rgba(157, 177, 255, 0.16);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 20px 40px rgba(2, 7, 18, 0.45);
+}
+
+.dd-nav-item-active {
+  position: relative;
+  background:
+    linear-gradient(100deg, rgba(129, 102, 255, 0.32) 0%, rgba(72, 90, 202, 0.2) 70%, rgba(25, 33, 53, 0.2) 100%),
+    rgba(24, 32, 53, 0.62);
+}
+
+.dd-nav-item-active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #8c70ff 0%, #66b1ff 100%);
+  box-shadow: 0 0 14px rgba(118, 95, 255, 0.55);
 }
