@@ -1,8 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #060b14;
+  --foreground: #eaf0ff;
+
+  --dd-bg-base: #060b14;
+  --dd-bg-surface-1: #0b1220;
+  --dd-bg-surface-2: #0f1728;
+  --dd-bg-surface-3: #131d31;
+
+  --dd-text-primary: #eaf0ff;
+  --dd-text-secondary: #a9b4cc;
+  --dd-text-muted: #7c88a6;
+
+  --dd-accent-primary: #7c5cff;
+  --dd-accent-secondary: #4ba3ff;
+  --dd-accent-gradient: linear-gradient(135deg, #6d4dff 0%, #6f7bff 45%, #3f9cff 100%);
+
+  --dd-success: #35d07f;
+  --dd-warning: #ffb347;
+  --dd-danger: #ff6c8b;
+
+  --dd-border-default: 1px solid rgba(165, 186, 255, 0.16);
+  --dd-border-active: 1px solid rgba(124, 92, 255, 0.75);
+
+  --dd-shadow-card: 0 12px 28px rgba(2, 7, 18, 0.45);
+  --dd-shadow-glow: 0 0 0 1px rgba(124, 92, 255, 0.45), 0 0 24px rgba(124, 92, 255, 0.25);
 }
 
 @theme inline {
@@ -12,15 +35,98 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 12% -10%, rgba(73, 102, 255, 0.16), transparent 52%),
+    radial-gradient(900px 520px at 88% -8%, rgba(124, 92, 255, 0.14), transparent 48%),
+    var(--dd-bg-base);
+  color: var(--dd-text-primary);
+  font-family:
+    Inter,
+    "Noto Sans SC",
+    "PingFang SC",
+    "Microsoft YaHei",
+    Arial,
+    Helvetica,
+    sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.dd-card {
+  background: linear-gradient(180deg, rgba(19, 29, 49, 0.72) 0%, rgba(15, 23, 40, 0.92) 100%);
+  border: var(--dd-border-default);
+  box-shadow: var(--dd-shadow-card);
+  border-radius: 16px;
+}
+
+.dd-card-subtle {
+  background: rgba(19, 29, 49, 0.55);
+  border: var(--dd-border-default);
+  border-radius: 12px;
+}
+
+.dd-input {
+  height: 40px;
+  border-radius: 10px;
+  border: var(--dd-border-default);
+  background: rgba(8, 14, 28, 0.86);
+  color: var(--dd-text-primary);
+}
+
+.dd-input::placeholder {
+  color: color-mix(in srgb, var(--dd-text-muted) 80%, transparent);
+}
+
+.dd-input:focus-visible,
+.dd-textarea:focus-visible {
+  outline: none;
+  border: var(--dd-border-active);
+  box-shadow: var(--dd-shadow-glow);
+}
+
+.dd-textarea {
+  border-radius: 12px;
+  border: var(--dd-border-default);
+  background: rgba(8, 14, 28, 0.86);
+  color: var(--dd-text-primary);
+}
+
+.dd-btn-primary {
+  border-radius: 12px;
+  background: var(--dd-accent-gradient);
+  color: #f4f6ff;
+  border: 1px solid rgba(124, 92, 255, 0.62);
+  box-shadow: 0 8px 20px rgba(92, 84, 255, 0.32);
+  transition: transform 90ms ease, filter 120ms ease;
+}
+
+.dd-btn-primary:hover {
+  filter: brightness(1.06);
+}
+
+.dd-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.dd-btn-secondary {
+  border-radius: 10px;
+  border: var(--dd-border-default);
+  background: rgba(19, 29, 49, 0.56);
+  color: var(--dd-text-secondary);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.dd-btn-secondary:hover {
+  border-color: rgba(124, 92, 255, 0.5);
+  background: rgba(26, 38, 61, 0.72);
+}
+
+.dd-pill-active {
+  border: var(--dd-border-active);
+  background: linear-gradient(180deg, rgba(77, 62, 170, 0.48) 0%, rgba(54, 43, 122, 0.42) 100%);
+  box-shadow: var(--dd-shadow-glow);
+}
+
+.dd-transition {
+  transition: all 180ms ease;
 }
