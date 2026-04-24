@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   },
   {
     id: "projects",
-    href: "/workflow",
+    href: "/projects",
     labelEn: "Projects",
     labelZh: "项目管理",
     icon: (
@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
   },
   {
     id: "templates",
-    href: "/generate",
+    href: "/templates",
     labelEn: "Templates",
     labelZh: "模板中心",
     icon: (
@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
   },
   {
     id: "brand",
-    href: "/workflow",
+    href: "/brand",
     labelEn: "Brand Kit",
     labelZh: "品牌中心",
     icon: (
@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
   },
   {
     id: "settings",
-    href: "/workflow",
+    href: "/settings",
     labelEn: "Settings",
     labelZh: "设置中心",
     icon: (
@@ -76,7 +76,12 @@ const navItems: NavItem[] = [
 export function LeftSidebar() {
   const pathname = usePathname();
   const showProPlan = pathname !== "/onboarding";
-  const activeNavId = "home";
+  
+  let activeNavId = "home";
+  if (pathname.startsWith("/projects")) activeNavId = "projects";
+  else if (pathname.startsWith("/templates")) activeNavId = "templates";
+  else if (pathname.startsWith("/brand")) activeNavId = "brand";
+  else if (pathname.startsWith("/settings")) activeNavId = "settings";
 
   return (
     <aside className="dd-sidebar">
@@ -124,7 +129,7 @@ export function LeftSidebar() {
             </div>
           </div>
           <div className="mt-3 text-sm text-[var(--dd-text-secondary)]">Unlimited exports</div>
-          <div className="text-sm text-[var(--dd-text-muted)]">无限导出</div>
+          <div className="text-sm text-[var(--dd-text-muted)] zh-only">无限导出</div>
           <button type="button" className="dd-btn-primary mt-4 h-11 w-full text-sm">
             Upgrade Plan
           </button>
@@ -143,7 +148,7 @@ export function LeftSidebar() {
           <span className="text-[var(--dd-text-muted)]">⌄</span>
         </div>
         <div className="mt-4 text-sm text-[var(--dd-text-secondary)]">3 members</div>
-        <div className="text-sm text-[var(--dd-text-muted)]">3 位成员</div>
+        <div className="text-sm text-[var(--dd-text-muted)] zh-only">3 位成员</div>
         <button type="button" className="dd-btn-secondary mt-4 h-11 w-full text-sm">
           Invite Members
         </button>

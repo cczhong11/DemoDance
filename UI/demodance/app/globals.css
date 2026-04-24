@@ -838,3 +838,9 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+html[lang="en"] .dd-label-zh,
+html[lang="en"] .dd-nav-label-zh,
+html[lang="en"] .zh-only {
+  display: none !important;
+}

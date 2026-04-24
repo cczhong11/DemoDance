@@ -197,12 +197,12 @@ export default function WorkflowPage() {
             <div className="dd-panel p-4 md:p-5">
               <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-8">
                 <label className="block">
-                  <div className="text-[17px] text-[var(--dd-text-secondary)]">Project Name / 项目名称</div>
+                  <div className="text-[17px] text-[var(--dd-text-secondary)]">Project Name <span className="zh-only">/ 项目名称</span></div>
                   <input className="dd-input mt-2 text-lg" value={projectName} onChange={(e) => setProjectName(e.target.value)} />
                 </label>
                 <div>
                   <div className="flex items-center justify-between text-[17px] text-[var(--dd-text-secondary)]">
-                    <span>Completion / 完成进度</span>
+                    <span>Completion <span className="zh-only">/ 完成进度</span></span>
                     <span>{completion}%</span>
                   </div>
                   <div className="dd-progress-track mt-3">
@@ -259,7 +259,7 @@ export default function WorkflowPage() {
                         .filter((f) => f.key === "logo")
                         .map((field) => (
                           <section key={field.key}>
-                            <div className="text-[17px] text-[var(--dd-text-secondary)]">Logo / 标志</div>
+                            <div className="text-[17px] text-[var(--dd-text-secondary)]">Logo <span className="zh-only">/ 标志</span></div>
                             <div className="mt-2 rounded-xl border border-dashed border-[var(--dd-border-default)] bg-[rgba(7,13,24,0.85)] h-40 flex items-center justify-center overflow-hidden">
                               {field.value ? (
                                 // eslint-disable-next-line @next/next/no-img-element
@@ -277,27 +277,23 @@ export default function WorkflowPage() {
                               {logoGenerating ? tr("Generating...", "生成中...") : tr("Generate Logo", "生成 Logo")}
                             </button>
                             <div className="mt-2 text-sm text-[var(--dd-text-muted)]">
-                              AI will generate logo options for you / AI 将为你生成多个 Logo 选项
+                              AI will generate logo options for you <span className="zh-only">/ AI 将为你生成多个 Logo 选项</span>
                             </div>
                           </section>
                         ))}
 
-                      {activeStep.fields
-                        .filter((f) => f.key !== "name" && f.key !== "slogan" && f.key !== "logo")
-                        .map((field) => (
-                          <label key={field.key} className="block">
-                            <div className="text-[17px] text-[var(--dd-text-secondary)]">{field.label}</div>
-                            <textarea
-                              className="dd-textarea min-h-60 mt-2 text-lg leading-7"
-                              value={field.value}
-                              onChange={(e) => updateField(activeStep.id, field.key, e.target.value)}
-                              placeholder={field.placeholder}
-                            />
-                            <div className="mt-2 text-sm text-[var(--dd-text-muted)]">
-                              {field.value.length} / {fieldCounter(field.key)}
-                            </div>
-                          </label>
-                        ))}
+                      <div className="flex flex-col">
+                        <label className="block h-full flex flex-col">
+                          <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration <span className="text-[14px] ml-1 text-[var(--dd-text-muted)] zh-only">开场脚本 / 旁白</span></div>
+                          <textarea
+                            className="dd-textarea flex-1 mt-2 text-lg leading-7"
+                            value={activeStepScript}
+                            onChange={(e) => setStepScript(activeStep.id, e.target.value)}
+                            placeholder={tr("Write the spoken script for this step...", "填写这一段的视频旁白脚本...")}
+                          />
+                          <div className="mt-2 text-sm text-[var(--dd-text-muted)]">{activeStepScript.length} / 2000</div>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -331,31 +327,33 @@ export default function WorkflowPage() {
                   </div>
                 )}
 
-                <label className="block mt-5">
-                  <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration</div>
-                  <textarea
-                    className="dd-textarea min-h-56 mt-2 text-lg leading-7"
-                    value={activeStepScript}
-                    onChange={(e) => setStepScript(activeStep.id, e.target.value)}
-                    placeholder={tr("Write the spoken script for this step...", "填写这一段的视频旁白脚本...")}
-                  />
-                  <div className="mt-2 text-sm text-[var(--dd-text-muted)]">{activeStepScript.length} / 2000</div>
-                </label>
+                {activeStep.id !== "product" ? (
+                  <label className="block mt-5">
+                    <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration</div>
+                    <textarea
+                      className="dd-textarea min-h-56 mt-2 text-lg leading-7"
+                      value={activeStepScript}
+                      onChange={(e) => setStepScript(activeStep.id, e.target.value)}
+                      placeholder={tr("Write the spoken script for this step...", "填写这一段的视频旁白脚本...")}
+                    />
+                    <div className="mt-2 text-sm text-[var(--dd-text-muted)]">{activeStepScript.length} / 2000</div>
+                  </label>
+                ) : null}
 
                 <div className="mt-6 pt-4 border-t border-[var(--dd-border-subtle)] flex items-center justify-between">
                   {prevStepId ? (
                     <button type="button" className="dd-btn-secondary h-11 px-6" onClick={() => setActiveStepId(prevStepId)}>
-                      Previous / 上一步
+                      Previous <span className="zh-only">/ 上一步</span>
                     </button>
                   ) : (
                     <Link href="/onboarding" className="dd-btn-secondary h-11 px-6">
-                      Previous / 上一步
+                      Previous <span className="zh-only">/ 上一步</span>
                     </Link>
                   )}
 
                   {nextStepId ? (
                     <button type="button" className="dd-btn-primary h-11 px-7" onClick={() => setActiveStepId(nextStepId)}>
-                      Next / 下一步
+                      Next <span className="zh-only">/ 下一步</span>
                     </button>
                   ) : (
                     <Link
@@ -387,7 +385,7 @@ export default function WorkflowPage() {
           contextSlot={
             <div className="dd-context-pill">
               <div className="text-[16px]">Context: {activeStepUi.en}</div>
-              <div className="text-sm mt-1">上下文：{activeStepUi.zh}</div>
+              <div className="text-sm mt-1 zh-only">上下文：{activeStepUi.zh}</div>
             </div>
           }
           body={

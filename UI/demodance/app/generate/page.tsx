@@ -189,8 +189,15 @@ export default function GeneratePage() {
                         <div className="dd-label-zh truncate">{steps.find((s) => s.id === section.id)?.title ?? ""}</div>
                       </div>
                     </div>
-                    <div className="dd-storyboard-preview mt-2" />
-                    <div className="mt-2 text-sm text-[var(--dd-text-secondary)]">4 frames / 4 张分镜</div>
+                    <div className="dd-storyboard-preview mt-2">
+                      <div className="dd-storyboard-preview-grid">
+                        <div className="dd-storyboard-preview-tile" />
+                        <div className="dd-storyboard-preview-tile" />
+                        <div className="dd-storyboard-preview-tile" />
+                        <div className="dd-storyboard-preview-tile" />
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm text-[var(--dd-text-secondary)]">4 frames <span className="zh-only">/ 4 张分镜</span></div>
                     <div className="mt-1 text-sm text-[var(--dd-text-muted)]">0:{String(section.durationSec).padStart(2, "0")}</div>
                     <div className={`dd-status-pill ${statusClass(section.status)} mt-2`}>
                       {section.status === "done"
@@ -221,12 +228,12 @@ export default function GeneratePage() {
               <table className="dd-table mt-3">
                 <thead>
                   <tr>
-                    <th>Chapter / 章节</th>
-                    <th>Source Storyboard / 分镜源</th>
-                    <th>Video Generation / 视频生成</th>
-                    <th>Progress / 进度</th>
-                    <th>Est. Duration / 预计时长</th>
-                    <th>Actions / 操作</th>
+                    <th>Chapter <span className="zh-only">/ 章节</span></th>
+                    <th>Source Storyboard <span className="zh-only">/ 分镜源</span></th>
+                    <th>Video Generation <span className="zh-only">/ 视频生成</span></th>
+                    <th>Progress <span className="zh-only">/ 进度</span></th>
+                    <th>Est. Duration <span className="zh-only">/ 预计时长</span></th>
+                    <th>Actions <span className="zh-only">/ 操作</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,14 +272,14 @@ export default function GeneratePage() {
                       <td>
                         <div className="flex items-center gap-1">
                           <button type="button" className="dd-icon-btn" onClick={() => void generateSection(section.id)} aria-label="Generate">
-                            ▶
+                            <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                           </button>
                           <button type="button" className="dd-icon-btn" onClick={() => void manualRefresh(section.id)} aria-label="Refresh">
-                            ↺
+                            <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>
                           </button>
                           {section.videoUrl ? (
                             <a href={section.videoUrl} target="_blank" rel="noreferrer" className="dd-icon-btn" aria-label="Preview">
-                              ◉
+                              <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5M12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5m0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3"/></svg>
                             </a>
                           ) : null}
                           {section.videoUrl ? (
@@ -282,7 +289,7 @@ export default function GeneratePage() {
                               className="dd-icon-btn"
                               aria-label="Download"
                             >
-                              ↓
+                              <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7zM5 18v2h14v-2z"/></svg>
                             </a>
                           ) : null}
                         </div>
@@ -295,7 +302,7 @@ export default function GeneratePage() {
               <div className="dd-export-grid mt-4">
                 <div className="dd-export-stats">
                   <div className="dd-export-stat">
-                    <div className="text-sm text-[var(--dd-text-muted)]">Total Duration / 总时长</div>
+                    <div className="text-sm text-[var(--dd-text-muted)]">Total Duration <span className="zh-only">/ 总时长</span></div>
                     <div className="text-[32px] font-semibold mt-2">
                       {Math.floor(totalDuration / 60)
                         .toString()
@@ -304,13 +311,13 @@ export default function GeneratePage() {
                     </div>
                   </div>
                   <div className="dd-export-stat">
-                    <div className="text-sm text-[var(--dd-text-muted)]">Chapters Completed / 已完成章节</div>
+                    <div className="text-sm text-[var(--dd-text-muted)]">Chapters Completed <span className="zh-only">/ 已完成章节</span></div>
                     <div className="text-[32px] font-semibold mt-2">
                       {readyCount} / {renderSections.length}
                     </div>
                   </div>
                   <div className="dd-export-stat">
-                    <div className="text-sm text-[var(--dd-text-muted)]">Export Readiness / 导出就绪度</div>
+                    <div className="text-sm text-[var(--dd-text-muted)]">Export Readiness <span className="zh-only">/ 导出就绪度</span></div>
                     <div className="text-[32px] font-semibold mt-2">{readiness}%</div>
                   </div>
                 </div>
@@ -324,7 +331,7 @@ export default function GeneratePage() {
                   <span className="text-4xl">🎬</span>
                   <span>
                     <span className="block text-[28px] font-semibold leading-tight">Combine & Export</span>
-                    <span className="block text-[17px] mt-1 opacity-90">Export final MP4 / 导出最终 MP4</span>
+                    <span className="block text-[17px] mt-1 opacity-90">Export final MP4 <span className="zh-only">/ 导出最终 MP4</span></span>
                   </span>
                   <span className="text-4xl">→</span>
                 </button>
@@ -354,7 +361,7 @@ export default function GeneratePage() {
           contextSlot={
             <div className="dd-context-pill">
               <div className="text-[16px]">Context: Generate & Export</div>
-              <div className="text-sm mt-1">当前阶段：生成与导出</div>
+              <div className="text-sm mt-1 zh-only">当前阶段：生成与导出</div>
             </div>
           }
           body={

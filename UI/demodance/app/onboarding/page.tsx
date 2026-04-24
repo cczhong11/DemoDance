@@ -14,7 +14,7 @@ import { parseSubmission, wordCount } from "./_lib/onboarding-ai";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { tr } = useLocale();
+  const { tr, locale, setLocale } = useLocale();
   const {
     submission,
     setSubmission,
@@ -147,9 +147,22 @@ export default function OnboardingPage() {
               </section>
 
               <section className="mt-5">
-                <div className="dd-label-en">Language / 语言</div>
-                <div className="mt-2 w-fit">
-                  <LanguageToggle />
+                <div className="dd-label-en">Language <span className="zh-only">/ 语言</span></div>
+                <div className="mt-2 flex w-full p-1 rounded-[12px] border border-[var(--dd-border-default)] bg-[rgba(8,15,28,0.82)]">
+                  <button
+                    type="button"
+                    className={`flex-1 h-12 rounded-[10px] text-lg font-semibold transition-all ${locale === "en" ? "bg-[rgba(19,31,50,0.82)] border border-[rgba(129,91,255,0.62)] text-white shadow-[0_0_14px_rgba(126,85,255,0.2)]" : "text-[var(--dd-text-muted)] border border-transparent hover:text-white"}`}
+                    onClick={() => setLocale("en")}
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 h-12 rounded-[10px] text-lg font-semibold transition-all ${locale === "zh" ? "bg-[rgba(19,31,50,0.82)] border border-[rgba(129,91,255,0.62)] text-white shadow-[0_0_14px_rgba(126,85,255,0.2)]" : "text-[var(--dd-text-muted)] border border-transparent hover:text-white"}`}
+                    onClick={() => setLocale("zh")}
+                  >
+                    中文
+                  </button>
                 </div>
               </section>
 
@@ -159,17 +172,23 @@ export default function OnboardingPage() {
                 disabled={loading}
                 className={`dd-btn-primary mt-6 h-14 w-full text-[31px] ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
               >
+                <span className="text-[28px] mr-2">✨</span>
                 {loading ? tr("Drafting...", "生成中...") : tr("Let AI draft the script", "让 AI 起草脚本")}
               </button>
               <p className="mt-3 text-center text-[17px] text-[var(--dd-text-muted)]">
                 AI will analyze the text and video (if provided) to draft the next workflow.
               </p>
 
-              <div className="dd-panel mt-5 p-4">
-                <div className="text-[18px] text-[var(--dd-text-secondary)]">
-                  Your data is private and secure. We only use your text and video to generate your demo.
+              <div className="dd-panel mt-5 p-4 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full grid place-items-center bg-[rgba(126,85,255,0.15)] border border-[rgba(126,85,255,0.3)] shrink-0 mt-1">
+                  <span className="text-2xl" aria-hidden="true">🛡️</span>
                 </div>
-                <div className="text-[16px] mt-1 text-[var(--dd-text-muted)]">您的数据安全私密，仅用于生成您的 demo。</div>
+                <div>
+                  <div className="text-[18px] text-[var(--dd-text-secondary)]">
+                    Your data is private and secure. We only use your text and video to generate your demo.
+                  </div>
+                  <div className="text-[16px] mt-1 text-[var(--dd-text-muted)] zh-only">您的数据安全私密，仅用于生成您的 demo。</div>
+                </div>
               </div>
 
               <div className="mt-5 flex items-center justify-between">
@@ -195,7 +214,7 @@ export default function OnboardingPage() {
                   <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
                     Clearly state the problem, your solution, what makes it unique, and the impact you expect.
                   </p>
-                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)]">
+                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)] zh-only">
                     清晰说明问题、你的解决方案、独特之处以及你期望带来的影响。
                   </p>
                 </div>
@@ -208,7 +227,7 @@ export default function OnboardingPage() {
                   <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
                     A short raw demo walkthrough, key features, and real results if any.
                   </p>
-                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)]">展示产品核心功能、关键流程和实际效果。</p>
+                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)] zh-only">展示产品核心功能、关键流程和实际效果。</p>
                 </div>
               </article>
 
@@ -219,7 +238,7 @@ export default function OnboardingPage() {
                   <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
                     AI drafts your script, then you review and edit before generating your final demo.
                   </p>
-                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)]">
+                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)] zh-only">
                     AI 将先生成个性化脚本，你可以审阅、编辑，再生成最终演示。
                   </p>
                 </div>
