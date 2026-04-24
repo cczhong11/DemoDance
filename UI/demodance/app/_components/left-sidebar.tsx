@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
+import logoImage from "../../public/logo.png";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -86,11 +88,8 @@ export function LeftSidebar() {
   return (
     <aside className="dd-sidebar">
       <div className="dd-sidebar-logo">
-        <div className="dd-logo-mark" aria-hidden>
-          <svg viewBox="0 0 24 24" className="h-5 w-5 text-white">
-            <path fill="currentColor" d="M4.2 4h6.6a7 7 0 0 1 0 14H4.2z" />
-            <path fill="currentColor" opacity=".84" d="M11.2 4H19v16h-7.8A8 8 0 0 0 11.2 4" />
-          </svg>
+        <div className="w-8 h-8 flex shrink-0 items-center justify-center mr-2">
+          <Image src={logoImage} alt="DemoDance Logo" height={28} className="w-auto h-7 object-contain" unoptimized />
         </div>
         <div className="dd-logo-text">DemoDance</div>
         <button type="button" className="dd-collapse-btn" aria-label="Collapse sidebar">
