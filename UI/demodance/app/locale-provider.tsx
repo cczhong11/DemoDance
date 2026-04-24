@@ -12,21 +12,20 @@ type LocaleContextValue = {
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
+function detectInitialLocale(): Locale {
+  if (typeof window === "undefined") return "en";
+
+  const stored = window.localStorage.getItem("demodance.locale");
+  if (stored === "en" || stored === "zh") {
+    return stored;
+  }
+
+  const browserLang = window.navigator.language.toLowerCase();
+  return browserLang.startsWith("zh") ? "zh" : "en";
+}
+
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<Locale>("en");
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem("demodance.locale");
-    if (stored === "en" || stored === "zh") {
-      setLocale(stored);
-      return;
-    }
-
-    const browserLang = window.navigator.language.toLowerCase();
-    if (browserLang.startsWith("zh")) {
-      setLocale("zh");
-    }
-  }, []);
+  const [locale, setLocale] = useState<Locale>(detectInitialLocale);
 
   useEffect(() => {
     window.localStorage.setItem("demodance.locale", locale);

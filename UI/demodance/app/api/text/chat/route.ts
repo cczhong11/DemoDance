@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       return { ok: true as const, result };
     };
 
-    let first = await requestOnce(payload as Record<string, unknown>);
+    const first = await requestOnce(payload as Record<string, unknown>);
     if (!first.ok) {
       return jsonError("IonRouter text API request failed", first.status, first.details);
     }

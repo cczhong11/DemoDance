@@ -64,36 +64,40 @@ const STORAGE_KEY = "demodance.workflow.v2";
 
 const stepOrder: StepId[] = ["audience", "importance", "product", "features", "tech", "impact"];
 
+const DEFAULT_FIELD_VALUES: Record<string, string> = {};
+
+const DEFAULT_STEP_SCRIPTS: Record<StepId, string> = {
+  audience: "",
+  importance: "",
+  product: "",
+  features: "",
+  tech: "",
+  impact: "",
+};
+
 function getFieldStorageKey(stepId: string, fieldKey: string): string {
   return `${stepId}.${fieldKey}`;
 }
 
 function getDefaultRenderSections(): SectionRender[] {
   return [
-    { id: "importance", title: "Why It Matters", summary: "", status: "idle", durationSec: 30, version: 0 },
+    { id: "audience", title: "Target User & Problem", summary: "", status: "idle", durationSec: 15, version: 0 },
+    { id: "importance", title: "Why It Matters", summary: "", status: "idle", durationSec: 15, version: 0 },
     { id: "product", title: "Product Intro", summary: "", status: "idle", durationSec: 20, version: 0 },
-    { id: "features", title: "Features", summary: "", status: "idle", durationSec: 40, version: 0 },
-    { id: "tech", title: "Tech Stack", summary: "", status: "idle", durationSec: 40, version: 0 },
-    { id: "impact", title: "Future Impact", summary: "", status: "idle", durationSec: 30, version: 0 },
+    { id: "features", title: "Features", summary: "", status: "idle", durationSec: 30, version: 0 },
+    { id: "impact", title: "Future Impact", summary: "", status: "idle", durationSec: 20, version: 0 },
   ];
 }
 
 function loadInitialState(): StoreState {
   if (typeof window === "undefined") {
     return {
-      projectName: "DemoDance Project",
+      projectName: "",
       submission: "",
       demoVideo: null,
       activeStepId: "audience",
-      fieldValues: {},
-      stepScripts: {
-        audience: "",
-        importance: "",
-        product: "",
-        features: "",
-        tech: "",
-        impact: "",
-      },
+      fieldValues: DEFAULT_FIELD_VALUES,
+      stepScripts: DEFAULT_STEP_SCRIPTS,
       chat: getInitialChat("en"),
       renderSections: getDefaultRenderSections(),
     };
@@ -103,19 +107,12 @@ function loadInitialState(): StoreState {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return {
-        projectName: "DemoDance Project",
+        projectName: "",
         submission: "",
         demoVideo: null,
         activeStepId: "audience",
-        fieldValues: {},
-        stepScripts: {
-          audience: "",
-          importance: "",
-          product: "",
-          features: "",
-          tech: "",
-          impact: "",
-        },
+        fieldValues: DEFAULT_FIELD_VALUES,
+        stepScripts: DEFAULT_STEP_SCRIPTS,
         chat: getInitialChat("en"),
         renderSections: getDefaultRenderSections(),
       };
@@ -123,29 +120,43 @@ function loadInitialState(): StoreState {
 
     const parsed = JSON.parse(raw) as Partial<StoreState>;
     return {
-      projectName: typeof parsed.projectName === "string" ? parsed.projectName : "DemoDance Project",
+      projectName: typeof parsed.projectName === "string" ? parsed.projectName : "",
       submission: typeof parsed.submission === "string" ? parsed.submission : "",
       demoVideo: parsed.demoVideo && typeof parsed.demoVideo === "object" ? (parsed.demoVideo as DemoVideoMeta) : null,
       activeStepId: stepOrder.includes(parsed.activeStepId as StepId) ? (parsed.activeStepId as StepId) : "audience",
-      fieldValues: parsed.fieldValues && typeof parsed.fieldValues === "object" ? (parsed.fieldValues as Record<string, string>) : {},
+      fieldValues:
+        parsed.fieldValues && typeof parsed.fieldValues === "object"
+          ? { ...DEFAULT_FIELD_VALUES, ...(parsed.fieldValues as Record<string, string>) }
+          : DEFAULT_FIELD_VALUES,
       stepScripts:
         parsed.stepScripts && typeof parsed.stepScripts === "object"
           ? {
-              audience: typeof (parsed.stepScripts as Record<string, unknown>).audience === "string" ? ((parsed.stepScripts as Record<string, string>).audience ?? "") : "",
-              importance: typeof (parsed.stepScripts as Record<string, unknown>).importance === "string" ? ((parsed.stepScripts as Record<string, string>).importance ?? "") : "",
-              product: typeof (parsed.stepScripts as Record<string, unknown>).product === "string" ? ((parsed.stepScripts as Record<string, string>).product ?? "") : "",
-              features: typeof (parsed.stepScripts as Record<string, unknown>).features === "string" ? ((parsed.stepScripts as Record<string, string>).features ?? "") : "",
-              tech: typeof (parsed.stepScripts as Record<string, unknown>).tech === "string" ? ((parsed.stepScripts as Record<string, string>).tech ?? "") : "",
-              impact: typeof (parsed.stepScripts as Record<string, unknown>).impact === "string" ? ((parsed.stepScripts as Record<string, string>).impact ?? "") : "",
+              audience:
+                typeof (parsed.stepScripts as Record<string, unknown>).audience === "string"
+                  ? ((parsed.stepScripts as Record<string, string>).audience ?? "")
+                  : DEFAULT_STEP_SCRIPTS.audience,
+              importance:
+                typeof (parsed.stepScripts as Record<string, unknown>).importance === "string"
+                  ? ((parsed.stepScripts as Record<string, string>).importance ?? "")
+                  : DEFAULT_STEP_SCRIPTS.importance,
+              product:
+                typeof (parsed.stepScripts as Record<string, unknown>).product === "string"
+                  ? ((parsed.stepScripts as Record<string, string>).product ?? "")
+                  : DEFAULT_STEP_SCRIPTS.product,
+              features:
+                typeof (parsed.stepScripts as Record<string, unknown>).features === "string"
+                  ? ((parsed.stepScripts as Record<string, string>).features ?? "")
+                  : DEFAULT_STEP_SCRIPTS.features,
+              tech:
+                typeof (parsed.stepScripts as Record<string, unknown>).tech === "string"
+                  ? ((parsed.stepScripts as Record<string, string>).tech ?? "")
+                  : DEFAULT_STEP_SCRIPTS.tech,
+              impact:
+                typeof (parsed.stepScripts as Record<string, unknown>).impact === "string"
+                  ? ((parsed.stepScripts as Record<string, string>).impact ?? "")
+                  : DEFAULT_STEP_SCRIPTS.impact,
             }
-          : {
-              audience: "",
-              importance: "",
-              product: "",
-              features: "",
-              tech: "",
-              impact: "",
-            },
+          : DEFAULT_STEP_SCRIPTS,
       chat: Array.isArray(parsed.chat) && parsed.chat.length > 0 ? (parsed.chat as ChatMsg[]) : getInitialChat("en"),
       renderSections: Array.isArray(parsed.renderSections) && parsed.renderSections.length > 0
         ? (parsed.renderSections as SectionRender[])
@@ -153,19 +164,12 @@ function loadInitialState(): StoreState {
     };
   } catch {
     return {
-      projectName: "DemoDance Project",
+      projectName: "",
       submission: "",
       demoVideo: null,
       activeStepId: "audience",
-      fieldValues: {},
-      stepScripts: {
-        audience: "",
-        importance: "",
-        product: "",
-        features: "",
-        tech: "",
-        impact: "",
-      },
+      fieldValues: DEFAULT_FIELD_VALUES,
+      stepScripts: DEFAULT_STEP_SCRIPTS,
       chat: getInitialChat("en"),
       renderSections: getDefaultRenderSections(),
     };
@@ -280,19 +284,12 @@ export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
         })),
       resetAll: () =>
         setStateAndPersist(() => ({
-          projectName: "DemoDance Project",
+          projectName: "",
           submission: "",
           demoVideo: null,
           activeStepId: "audience",
-          fieldValues: {},
-          stepScripts: {
-            audience: "",
-            importance: "",
-            product: "",
-            features: "",
-            tech: "",
-            impact: "",
-          },
+          fieldValues: DEFAULT_FIELD_VALUES,
+          stepScripts: DEFAULT_STEP_SCRIPTS,
           chat: getInitialChat(locale),
           renderSections: getDefaultRenderSections(),
         })),

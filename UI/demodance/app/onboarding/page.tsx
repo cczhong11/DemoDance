@@ -2,38 +2,33 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { AppShell } from "../_components/app-shell";
+import { AssistantPanel } from "../_components/assistant-panel";
+import { LanguageToggle } from "../_components/language-toggle";
+import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
 import { useWorkflowStore } from "../_state/workflow-store";
-
-function extractJsonObject(raw: string): Record<string, unknown> | null {
-  const fenced = raw.match(/```json\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1] ?? raw;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  try {
-    return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function readAssistantText(data: unknown): string {
-  const body = data as { choices?: Array<{ message?: { content?: unknown } }> };
-  const content = body.choices?.[0]?.message?.content;
-  return typeof content === "string" ? content : "";
-}
+import { parseSubmission, wordCount } from "./_lib/onboarding-ai";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { tr, locale, setLocale } = useLocale();
-  const { submission, setSubmission, demoVideo, setDemoVideo, projectName, setProjectName, setActiveStepId, fillStepFields, setChat } = useWorkflowStore();
+  const { tr } = useLocale();
+  const {
+    submission,
+    setSubmission,
+    demoVideo,
+    setDemoVideo,
+    setActiveStepId,
+    fillStepFields,
+    setChat,
+  } = useWorkflowStore();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const currentWordCount = useMemo(() => wordCount(submission), [submission]);
 
   async function prefillAndContinue() {
     if (loading) return;
@@ -47,49 +42,26 @@ export default function OnboardingPage() {
     setError(null);
 
     try {
-      const prompt = [
-        "You are DemoDance parser.",
-        "Return only JSON object with fields:",
-        "audience_user, audience_problem, importance_evidence, product_name, product_slogan, feature1, feature2, feature3, tech_stack, impact",
-        "Submission:",
-        input,
-      ].join("\n\n");
+      const parsed = await parseSubmission(input);
 
-      const response = await fetch("/api/text/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(String((data as { error?: unknown }).error ?? "parse failed"));
-      }
-
-      const text = readAssistantText(data);
-      const parsed = extractJsonObject(text) ?? {};
-
-      const asString = (value: unknown, fallback = "") =>
-        typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-
-      fillStepFields("audience", { user: asString(parsed.audience_user), problem: asString(parsed.audience_problem) });
+      fillStepFields("audience", { user: parsed.audienceUser, problem: parsed.audienceProblem });
       fillStepFields("importance", {
-        evidence: asString(
-          parsed.importance_evidence,
+        evidence:
+          parsed.importanceEvidence ||
           tr("Demand is rising and teams need clearer launch storytelling.", "需求在增长，团队需要更清晰的发布叙事。"),
-        ),
       });
       fillStepFields("product", {
-        name: asString(parsed.product_name, projectName || "DemoDance"),
-        slogan: asString(parsed.product_slogan, tr("From raw demo to launch-ready.", "从原始 demo 到可发布成片。")),
+        name: parsed.productName || "DemoDance",
+        slogan: parsed.productSlogan || tr("From raw demo to launch-ready.", "从原始 demo 到可发布成片。"),
       });
       fillStepFields("features", {
-        feature1: asString(parsed.feature1),
-        feature2: asString(parsed.feature2),
-        feature3: asString(parsed.feature3),
+        feature1: parsed.feature1,
+        feature2: parsed.feature2,
+        feature3: parsed.feature3,
       });
-      fillStepFields("tech", { stack: asString(parsed.tech_stack, "Next.js · OpenAI · FFmpeg") });
+      fillStepFields("tech", { stack: parsed.techStack || "Next.js · OpenAI · FFmpeg" });
       fillStepFields("impact", {
-        impact: asString(parsed.impact, tr("Help builders launch with confidence.", "帮助开发者更自信地发布。")),
+        impact: parsed.impact || tr("Help builders launch with confidence.", "帮助开发者更自信地发布。"),
       });
 
       setActiveStepId("importance");
@@ -104,8 +76,7 @@ export default function OnboardingPage() {
 
       router.push("/workflow");
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      setError(message);
+      setError(e instanceof Error ? e.message : String(e));
       router.push("/workflow");
     } finally {
       setLoading(false);
@@ -114,68 +85,54 @@ export default function OnboardingPage() {
 
   return (
     <AppShell>
-      <main className="h-full flex items-start justify-center pt-2">
-        <section className="dd-card w-full max-w-5xl p-4 md:p-5">
-          <header className="dd-card-subtle px-5 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2.5">
-                  <span className="h-8 w-8 rounded-full grid place-items-center text-xs border border-[rgba(124,92,255,0.72)] bg-[linear-gradient(180deg,rgba(136,107,255,0.44),rgba(74,57,162,0.65))] text-white shadow-[0_0_16px_rgba(115,89,255,0.5)]">1</span>
-                  <span className="leading-tight">
-                    <span className="block text-sm text-white">Onboarding</span>
-                    <span className="block text-xs text-[var(--dd-text-muted)]">入口</span>
-                  </span>
-                </div>
-                <span className="h-px w-14 bg-[linear-gradient(90deg,rgba(124,92,255,0.2),rgba(165,186,255,0.35))]" />
-                <span className="flex items-center gap-2.5 opacity-75">
-                  <span className="h-8 w-8 rounded-full grid place-items-center text-xs border border-[rgba(165,186,255,0.35)] text-[var(--dd-text-secondary)]">2</span>
-                  <span className="leading-tight">
-                    <span className="block text-sm text-[var(--dd-text-secondary)]">Script & Collaborate</span>
-                    <span className="block text-xs text-[var(--dd-text-muted)]">脚本与协作</span>
-                  </span>
-                </span>
-                <span className="h-px w-14 bg-[linear-gradient(90deg,rgba(124,92,255,0.2),rgba(165,186,255,0.35))]" />
-                <span className="flex items-center gap-2.5 opacity-75">
-                  <span className="h-8 w-8 rounded-full grid place-items-center text-xs border border-[rgba(165,186,255,0.35)] text-[var(--dd-text-secondary)]">3</span>
-                  <span className="leading-tight">
-                    <span className="block text-sm text-[var(--dd-text-secondary)]">Generate & Export</span>
-                    <span className="block text-xs text-[var(--dd-text-muted)]">生成与导出</span>
-                  </span>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button onClick={() => setLocale("en")} className={`dd-btn-secondary h-8 px-3 text-xs ${locale === "en" ? "dd-pill-active text-white" : ""}`}>EN</button>
-                <button onClick={() => setLocale("zh")} className={`dd-btn-secondary h-8 px-3 text-xs ${locale === "zh" ? "dd-pill-active text-white" : ""}`}>中文</button>
-              </div>
-            </div>
+      <main className="dd-page-grid">
+        <section className="dd-center-pane">
+          <header className="dd-main-header">
+            <TopStepper activeStep={1} />
+            <LanguageToggle />
           </header>
 
-          <div className="mt-3 dd-card-subtle p-5">
-            <div className="mb-5">
-              <h1 className="text-[32px] font-semibold tracking-tight">Onboarding</h1>
-              <p className="text-sm text-[var(--dd-text-secondary)] mt-1">Provide your Hackathon submission and optional demo video.</p>
-              <p className="text-xs text-[var(--dd-text-muted)] mt-1">填写你的 Hackathon 提交内容（建议 20+ 字），并可选上传 demo 视频。</p>
-            </div>
+          <div className="p-5 md:p-6 overflow-y-auto h-[calc(100%-73px)]">
+            <section className="dd-panel p-5 md:p-6">
+              <h1 className="dd-section-title">Onboarding</h1>
+              <p className="dd-label-zh mt-2">素材输入</p>
+              <p className="mt-3 text-[19px] text-[var(--dd-text-secondary)] max-w-4xl">
+                Paste your hackathon submission text and optionally upload your raw demo video. Our AI will understand
+                your project and draft a compelling demo script for you.
+              </p>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="dd-card-subtle p-4">
-                <div className="text-sm font-medium">Hackathon Submission</div>
-                <div className="text-xs text-[var(--dd-text-muted)] mt-1">20+ words</div>
-                <textarea
-                  className="dd-textarea mt-3 w-full min-h-44 px-3 py-2"
-                  placeholder="Describe your project, problem, and impact..."
-                  value={submission}
-                  onChange={(e) => setSubmission(e.target.value)}
-                />
-                <div className="text-xs text-[var(--dd-text-muted)] mt-2">{submission.length} / 2000</div>
-              </div>
+              <label className="block mt-6">
+                <div className="flex items-center gap-4">
+                  <span className="dd-label-en">Hackathon Submission</span>
+                  <span className="dd-label-zh">提交文本</span>
+                </div>
+                <div className="relative mt-2">
+                  <textarea
+                    className="dd-textarea min-h-52 pr-24 pb-10 text-lg leading-7"
+                    placeholder="Describe your project, the problem you solve, your solution, and the impact you aim to create."
+                    value={submission}
+                    onChange={(e) => setSubmission(e.target.value)}
+                  />
+                  <div className="absolute left-3 bottom-2 text-sm text-[var(--dd-text-muted)]">{currentWordCount}+ words</div>
+                  <div className="absolute right-3 bottom-2 text-sm text-[var(--dd-text-muted)]">{submission.length} / 2000</div>
+                </div>
+              </label>
 
-              <div className="dd-card-subtle p-4">
-                <div className="text-sm font-medium">Original Demo Video (Optional)</div>
-                <div className="text-xs text-[var(--dd-text-muted)] mt-1">MP4 / MOV / WEBM</div>
-                <label className="mt-3 h-44 border border-dashed rounded-xl border-[rgba(165,186,255,0.22)] bg-[rgba(12,18,31,0.65)] grid place-items-center text-sm text-[var(--dd-text-muted)] cursor-pointer">
-                  {demoVideo ? `${demoVideo.name} (${(demoVideo.size / 1024 / 1024).toFixed(1)} MB)` : "Drag & drop or click to upload"}
+              <section className="mt-5">
+                <div className="flex items-center gap-4">
+                  <span className="dd-label-en">Original Demo Video (Optional)</span>
+                  <span className="dd-label-zh">原始 demo 视频（可选）</span>
+                </div>
+                <label className="dd-upload-zone mt-2 cursor-pointer">
+                  <div>
+                    <div className="text-2xl text-[var(--dd-brand-purple)]">↑</div>
+                    <div className="mt-2 text-lg">
+                      {demoVideo
+                        ? `${demoVideo.name} (${(demoVideo.size / 1024 / 1024).toFixed(1)} MB)`
+                        : "Drag & drop your video here, or click to browse"}
+                    </div>
+                    <div className="text-sm mt-2 text-[var(--dd-text-muted)]">MP4 / MOV / WebM, up to 500MB</div>
+                  </div>
                   <input
                     type="file"
                     accept="video/*"
@@ -187,26 +144,99 @@ export default function OnboardingPage() {
                     }}
                   />
                 </label>
+              </section>
 
-                <div className="mt-3">
-                  <div className="text-xs text-[var(--dd-text-secondary)]">Project Name</div>
-                  <input className="dd-input mt-1 w-full px-3" value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+              <section className="mt-5">
+                <div className="dd-label-en">Language / 语言</div>
+                <div className="mt-2 w-fit">
+                  <LanguageToggle />
                 </div>
-              </div>
-            </div>
+              </section>
 
-            <div className="mt-6 flex items-center justify-between">
-              <p className="text-xs text-[var(--dd-text-muted)]">AI will analyze your text and prefill script draft.</p>
-              <div className="flex items-center gap-2">
-                <Link href="/workflow" className="dd-btn-secondary h-10 px-4 text-sm inline-flex items-center">Skip</Link>
-                <button onClick={prefillAndContinue} disabled={loading} className={`dd-btn-primary h-10 px-5 text-sm ${loading ? "opacity-60 cursor-not-allowed" : ""}`}>
-                  {loading ? tr("Drafting...", "生成中...") : tr("Let AI draft", "让 AI 起草")}
-                </button>
+              <button
+                type="button"
+                onClick={prefillAndContinue}
+                disabled={loading}
+                className={`dd-btn-primary mt-6 h-14 w-full text-[31px] ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+              >
+                {loading ? tr("Drafting...", "生成中...") : tr("Let AI draft the script", "让 AI 起草脚本")}
+              </button>
+              <p className="mt-3 text-center text-[17px] text-[var(--dd-text-muted)]">
+                AI will analyze the text and video (if provided) to draft the next workflow.
+              </p>
+
+              <div className="dd-panel mt-5 p-4">
+                <div className="text-[18px] text-[var(--dd-text-secondary)]">
+                  Your data is private and secure. We only use your text and video to generate your demo.
+                </div>
+                <div className="text-[16px] mt-1 text-[var(--dd-text-muted)]">您的数据安全私密，仅用于生成您的 demo。</div>
               </div>
-            </div>
-            {error && <div className="text-xs text-[var(--dd-danger)] mt-3">{error}</div>}
+
+              <div className="mt-5 flex items-center justify-between">
+                <Link href="/workflow" className="dd-btn-secondary h-10 px-5 text-sm">
+                  Skip
+                </Link>
+                {error ? <div className="text-sm text-[var(--dd-danger)]">{error}</div> : null}
+              </div>
+            </section>
           </div>
         </section>
+
+        <AssistantPanel
+          title="AI Guide"
+          subtitle="快速上手指南"
+          rightSlot={<span className="dd-status-pill">~2 min</span>}
+          body={
+            <div className="space-y-3">
+              <article className="dd-guide-card">
+                <div className="text-[var(--dd-brand-purple)] text-xl">💡</div>
+                <div>
+                  <div className="dd-label-en">1. What makes a strong submission?</div>
+                  <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
+                    Clearly state the problem, your solution, what makes it unique, and the impact you expect.
+                  </p>
+                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)]">
+                    清晰说明问题、你的解决方案、独特之处以及你期望带来的影响。
+                  </p>
+                </div>
+              </article>
+
+              <article className="dd-guide-card">
+                <div className="text-[var(--dd-brand-purple)] text-xl">🎬</div>
+                <div>
+                  <div className="dd-label-en">2. What to include in your video?</div>
+                  <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
+                    A short raw demo walkthrough, key features, and real results if any.
+                  </p>
+                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)]">展示产品核心功能、关键流程和实际效果。</p>
+                </div>
+              </article>
+
+              <article className="dd-guide-card">
+                <div className="text-[var(--dd-brand-purple)] text-xl">🚀</div>
+                <div>
+                  <div className="dd-label-en">3. What happens next?</div>
+                  <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
+                    AI drafts your script, then you review and edit before generating your final demo.
+                  </p>
+                  <p className="mt-2 text-[15px] text-[var(--dd-text-muted)]">
+                    AI 将先生成个性化脚本，你可以审阅、编辑，再生成最终演示。
+                  </p>
+                </div>
+              </article>
+            </div>
+          }
+          footer={
+            <div className="dd-panel p-3">
+              <div className="dd-label-en">Before you start</div>
+              <ul className="mt-2 text-[15px] text-[var(--dd-text-secondary)] space-y-1">
+                <li>✓ Submission text ready</li>
+                <li>✓ Raw demo video (optional)</li>
+                <li>✓ Language selected</li>
+              </ul>
+            </div>
+          }
+        />
       </main>
     </AppShell>
   );

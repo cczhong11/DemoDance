@@ -1,125 +1,88 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { AppShell } from "../_components/app-shell";
+import { AssistantPanel } from "../_components/assistant-panel";
+import { LanguageToggle } from "../_components/language-toggle";
+import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
 import { useWorkflowStore } from "../_state/workflow-store";
+import type { StepId } from "../home/types";
+import { buildSectionTaskContent, createVideoTask, loadVideoTaskStatus, summarizeStep } from "./_lib/generate-ai";
+import { buildExportFileName, combineVideoUrls } from "./_lib/video-export";
 
-function toStrictArrayBuffer(data: unknown): ArrayBuffer {
-  const bytes = data instanceof Uint8Array ? Uint8Array.from(data) : new TextEncoder().encode(String(data));
-  const arrayBuffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(arrayBuffer).set(bytes);
-  return arrayBuffer;
+function statusClass(status: "idle" | "generating" | "done"): "waiting" | "generating" | "done" {
+  if (status === "done") return "done";
+  if (status === "generating") return "generating";
+  return "waiting";
 }
 
 export default function GeneratePage() {
-  const { tr, locale, setLocale } = useLocale();
+  const { tr } = useLocale();
   const { projectName, steps, getStepScript, renderSections, setRenderSections } = useWorkflowStore();
   const [renderingAll, setRenderingAll] = useState(false);
   const [combining, setCombining] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [exportName, setExportName] = useState<string | null>(null);
+  const [assistantNotes, setAssistantNotes] = useState<string[]>([
+    tr("Great job! You're now working with storyboard patches for each chapter.", "做得很好！你现在在为每个章节生成分镜批次。"),
+    tr(
+      "Let's keep pacing flowing naturally across all chapters and visual style consistent.",
+      "让我们确保每个章节的节奏衔接自然，并保持整体视觉风格一致。",
+    ),
+  ]);
 
   const allDone = useMemo(() => renderSections.every((s) => s.status === "done"), [renderSections]);
+  const readyCount = useMemo(() => renderSections.filter((s) => s.status === "done").length, [renderSections]);
+  const totalDuration = useMemo(() => renderSections.reduce((sum, section) => sum + section.durationSec, 0), [renderSections]);
+  const readiness = useMemo(() => Math.round((readyCount / renderSections.length) * 100), [readyCount, renderSections.length]);
 
-  function summarizeStep(stepId: string): string {
-    const step = steps.find((s) => s.id === stepId);
-    if (!step) return "";
-    const fieldsSummary = step.fields
-      .map((field) => `${field.label}: ${field.value}`)
-      .filter((line) => !line.endsWith(": "))
-      .join("\n");
-    const script = getStepScript(step.id).trim();
-    return script ? `${fieldsSummary}\nScript: ${script}` : fieldsSummary;
-  }
-
-  function buildPrompt(sectionId: string): string {
-    const summary = summarizeStep(sectionId);
-    return [
-      "Create a short launch-video section.",
-      `Section: ${sectionId}`,
-      "Use this context:",
-      summary,
-      "Cinematic, crisp, professional product launch style.",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-  }
-
-  async function generateSection(sectionId: string) {
+  async function generateSection(sectionId: StepId) {
+    const sectionSummary = summarizeStep(steps, getStepScript, sectionId);
     setRenderSections((prev) =>
       prev.map((item) =>
         item.id === sectionId
-          ? { ...item, status: "generating", summary: summarizeStep(sectionId), apiState: "queued" }
+          ? { ...item, status: "generating", summary: sectionSummary, apiState: "queued" }
           : item,
       ),
     );
 
     try {
-      const response = await fetch("/api/video/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: buildPrompt(sectionId) }),
-      });
-
-      if (!response.ok) {
-        const raw = await response.text();
-        throw new Error(raw || "Failed to create video task");
-      }
-
-      const created = await response.json();
-      const taskId = created.data?.task_id || created.task_id || created.data?.id || created.id;
-      if (!taskId) {
-        throw new Error("No task_id returned");
-      }
+      const { content } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId);
+      const taskId = await createVideoTask(content);
 
       setRenderSections((prev) => prev.map((item) => (item.id === sectionId ? { ...item, taskId } : item)));
 
       while (true) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
-
-        const statusRes = await fetch(`/api/video/tasks/${taskId}`);
-        const statusData = await statusRes.json();
-
-        const state = statusData.data?.status || statusData.data?.state || statusData.status || statusData.state;
-        const rawProgress = statusData.data?.progress ?? statusData.progress;
-        const progress = typeof rawProgress === "number" ? rawProgress : Number.parseFloat(String(rawProgress));
-        const videoUrl =
-          statusData.data?.content?.video_url ||
-          statusData.content?.video_url ||
-          statusData.data?.video_url ||
-          statusData.video_url;
+        const status = await loadVideoTaskStatus(taskId);
 
         setRenderSections((prev) =>
           prev.map((item) =>
             item.id === sectionId
               ? {
                   ...item,
-                  apiState: state,
-                  progress: Number.isFinite(progress) ? progress : item.progress,
-                  videoUrl: typeof videoUrl === "string" ? videoUrl : item.videoUrl,
-                  rawResponse: statusData,
+                  apiState: status.state,
+                  progress: status.progress ?? item.progress,
+                  videoUrl: status.videoUrl ?? item.videoUrl,
+                  rawResponse: status.raw,
                 }
               : item,
           ),
         );
 
-        if (state === "succeeded") {
+        if (status.state === "succeeded") {
           setRenderSections((prev) =>
             prev.map((item) =>
               item.id === sectionId
-                ? { ...item, status: "done", version: item.version + 1, apiState: "succeeded" }
+                ? { ...item, status: "done", version: item.version + 1, apiState: "succeeded", progress: 100 }
                 : item,
             ),
           );
           break;
         }
-
-        if (state === "failed" || state === "cancelled") {
-          throw new Error(`Task ${state}`);
-        }
+        if (status.state === "failed" || status.state === "cancelled") throw new Error(`Task ${status.state}`);
       }
     } catch (e) {
       const details = e instanceof Error ? e.message : String(e);
@@ -132,11 +95,9 @@ export default function GeneratePage() {
   async function startGenerateAll() {
     if (renderingAll) return;
     setRenderingAll(true);
-
     for (const section of renderSections) {
       await generateSection(section.id);
     }
-
     setRenderingAll(false);
   }
 
@@ -144,27 +105,18 @@ export default function GeneratePage() {
     const section = renderSections.find((item) => item.id === sectionId);
     if (!section?.taskId) return;
 
-    const res = await fetch(`/api/video/tasks/${section.taskId}`);
-    const statusData = await res.json();
-    const state = statusData.data?.status || statusData.data?.state || statusData.status || statusData.state;
-    const rawProgress = statusData.data?.progress ?? statusData.progress;
-    const progress = typeof rawProgress === "number" ? rawProgress : Number.parseFloat(String(rawProgress));
-    const videoUrl =
-      statusData.data?.content?.video_url ||
-      statusData.content?.video_url ||
-      statusData.data?.video_url ||
-      statusData.video_url;
+    const status = await loadVideoTaskStatus(section.taskId);
 
     setRenderSections((prev) =>
       prev.map((item) =>
         item.id === sectionId
           ? {
               ...item,
-              apiState: state,
-              progress: Number.isFinite(progress) ? progress : item.progress,
-              videoUrl: typeof videoUrl === "string" ? videoUrl : item.videoUrl,
-              status: state === "succeeded" ? "done" : item.status,
-              version: state === "succeeded" ? item.version + 1 : item.version,
+              apiState: status.state,
+              progress: status.progress ?? item.progress,
+              videoUrl: status.videoUrl ?? item.videoUrl,
+              status: status.state === "succeeded" ? "done" : item.status,
+              version: status.state === "succeeded" ? item.version + 1 : item.version,
             }
           : item,
       ),
@@ -176,39 +128,12 @@ export default function GeneratePage() {
     setCombining(true);
 
     try {
-      const ready = renderSections.filter((item) => item.status === "done" && item.videoUrl);
-      if (ready.length === 0) {
-        throw new Error("No completed sections");
-      }
-
-      const { FFmpeg } = await import("@ffmpeg/ffmpeg");
-      const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
-      const ffmpeg = new FFmpeg();
-      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-      });
-
-      let concatList = "";
-      for (let i = 0; i < ready.length; i += 1) {
-        const inputName = `input${i}.mp4`;
-        const proxyUrl = `/api/video/proxy?url=${encodeURIComponent(ready[i].videoUrl!)}`;
-        await ffmpeg.writeFile(inputName, await fetchFile(proxyUrl));
-        concatList += `file '${inputName}'\n`;
-      }
-
-      await ffmpeg.writeFile("concat.txt", concatList);
-      await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "output.mp4"]);
-      const data = await ffmpeg.readFile("output.mp4");
-      const blob = new Blob([toStrictArrayBuffer(data)], { type: "video/mp4" });
-      const url = URL.createObjectURL(blob);
+      const ready = renderSections.filter((item) => item.status === "done" && item.videoUrl).map((item) => item.videoUrl!);
+      const url = await combineVideoUrls(ready);
       if (exportUrl) URL.revokeObjectURL(exportUrl);
       setExportUrl(url);
-      const safeName = (projectName || "DemoDance").trim().replace(/\s+/g, "_");
-      setExportName(`${safeName}_final.mp4`);
-    } catch (e) {
-      console.error(e);
+      setExportName(buildExportFileName(projectName));
+    } catch {
       alert(tr("Failed to combine videos.", "视频拼接失败。"));
     } finally {
       setCombining(false);
@@ -217,114 +142,259 @@ export default function GeneratePage() {
 
   return (
     <AppShell>
-      <main className="h-full pt-2">
-        <section className="dd-card w-full max-w-5xl mx-auto p-4 md:p-5">
-          <header className="dd-card-subtle px-5 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-6">
-                <Link href="/onboarding" className="flex items-center gap-2.5 opacity-75">
-                  <span className="h-8 w-8 rounded-full grid place-items-center text-xs border border-[rgba(165,186,255,0.35)] text-[var(--dd-text-secondary)]">1</span>
-                  <span className="leading-tight">
-                    <span className="block text-sm text-[var(--dd-text-secondary)]">Onboarding</span>
-                    <span className="block text-xs text-[var(--dd-text-muted)]">入口</span>
-                  </span>
-                </Link>
-                <span className="h-px w-14 bg-[linear-gradient(90deg,rgba(124,92,255,0.2),rgba(165,186,255,0.35))]" />
-                <Link href="/workflow" className="flex items-center gap-2.5 opacity-75">
-                  <span className="h-8 w-8 rounded-full grid place-items-center text-xs border border-[rgba(165,186,255,0.35)] text-[var(--dd-text-secondary)]">2</span>
-                  <span className="leading-tight">
-                    <span className="block text-sm text-[var(--dd-text-secondary)]">Script & Collaborate</span>
-                    <span className="block text-xs text-[var(--dd-text-muted)]">脚本与协作</span>
-                  </span>
-                </Link>
-                <span className="h-px w-14 bg-[linear-gradient(90deg,rgba(124,92,255,0.2),rgba(165,186,255,0.35))]" />
-                <div className="flex items-center gap-2.5">
-                  <span className="h-8 w-8 rounded-full grid place-items-center text-xs border border-[rgba(124,92,255,0.72)] bg-[linear-gradient(180deg,rgba(136,107,255,0.44),rgba(74,57,162,0.65))] text-white shadow-[0_0_16px_rgba(115,89,255,0.5)]">3</span>
-                  <span className="leading-tight">
-                    <span className="block text-sm text-white">Generate & Export</span>
-                    <span className="block text-xs text-[var(--dd-text-muted)]">生成与导出</span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button onClick={() => setLocale("en")} className={`dd-btn-secondary h-8 px-3 text-xs ${locale === "en" ? "dd-pill-active text-white" : ""}`}>EN</button>
-                <button onClick={() => setLocale("zh")} className={`dd-btn-secondary h-8 px-3 text-xs ${locale === "zh" ? "dd-pill-active text-white" : ""}`}>中文</button>
-              </div>
-            </div>
+      <main className="dd-page-grid">
+        <section className="dd-center-pane">
+          <header className="dd-main-header">
+            <TopStepper activeStep={3} />
+            <LanguageToggle />
           </header>
 
-          <section className="mt-3 dd-card-subtle p-5">
-            <div className="flex items-start justify-between gap-4 mb-5">
-              <div>
-                <h1 className="text-[32px] font-semibold tracking-tight">Generate & Export</h1>
-                <p className="text-sm text-[var(--dd-text-secondary)] mt-1">Generate each section and combine into final MP4.</p>
-                <p className="text-xs text-[var(--dd-text-muted)] mt-1">分段生成视频，可重试、预览，最终合并导出。</p>
-              </div>
-              <button
-                onClick={startGenerateAll}
-                className={`dd-btn-primary h-10 px-4 text-sm ${renderingAll ? "opacity-60 cursor-not-allowed" : ""}`}
-                disabled={renderingAll}
-              >
-                {renderingAll ? "Generating..." : "Start Generate All"}
-              </button>
-            </div>
+          <div className="p-4 md:p-5 overflow-y-auto h-[calc(100%-73px)] space-y-3">
+            <section className="dd-panel p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="dd-tab-index">A</span>
+                    <h2 className="text-[34px] font-semibold leading-tight">Storyboard Generation</h2>
+                  </div>
+                  <p className="dd-label-zh mt-1">分镜生成</p>
+                  <p className="mt-2 text-[17px] text-[var(--dd-text-secondary)]">
+                    Create a visual blueprint first. We generate storyboard frames for each chapter.
+                  </p>
+                </div>
 
-            <div className="grid gap-3">
-              {renderSections.map((section, idx) => (
-                <div key={section.id} className="dd-card-subtle p-4 flex items-center gap-3">
-                  <div className="h-7 w-7 rounded-full grid place-items-center text-xs dd-pill-active">{idx + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{section.title}</div>
-                    <div className="text-xs text-[var(--dd-text-muted)] mt-0.5 truncate">
-                      {(section.summary || summarizeStep(section.id)).slice(0, 120) || "No summary yet"}
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <button type="button" className="dd-btn-primary h-11 px-5" onClick={startGenerateAll} disabled={renderingAll}>
+                    {renderingAll ? "Generating..." : "Generate Storyboards"}
+                  </button>
+                  <button type="button" className="dd-btn-secondary h-11 px-4" onClick={startGenerateAll} disabled={renderingAll}>
+                    Regenerate
+                  </button>
+                  <button type="button" className="dd-btn-secondary h-11 px-4">
+                    Preview All
+                  </button>
+                  <button type="button" className="dd-btn-secondary h-11 px-4">
+                    Edit Prompt
+                  </button>
+                </div>
+              </div>
+
+              <div className="dd-storyboard-grid mt-4">
+                {renderSections.map((section, idx) => (
+                  <article key={section.id} className="dd-storyboard-card">
+                    <div className="flex items-center gap-2">
+                      <span className="dd-tab-index">{idx + 1}</span>
+                      <div className="min-w-0">
+                        <div className="dd-label-en truncate">{section.title}</div>
+                        <div className="dd-label-zh truncate">{steps.find((s) => s.id === section.id)?.title ?? ""}</div>
+                      </div>
+                    </div>
+                    <div className="dd-storyboard-preview mt-2" />
+                    <div className="mt-2 text-sm text-[var(--dd-text-secondary)]">4 frames / 4 张分镜</div>
+                    <div className="mt-1 text-sm text-[var(--dd-text-muted)]">0:{String(section.durationSec).padStart(2, "0")}</div>
+                    <div className={`dd-status-pill ${statusClass(section.status)} mt-2`}>
+                      {section.status === "done"
+                        ? "Done"
+                        : section.status === "generating"
+                          ? `Generating... ${Math.round(section.progress ?? 0)}%`
+                          : "Waiting"}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="dd-panel p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="dd-tab-index">B</span>
+                    <h2 className="text-[34px] font-semibold leading-tight">Video Generation</h2>
+                  </div>
+                  <p className="dd-label-zh mt-1">视频生成</p>
+                </div>
+                <button type="button" className="dd-btn-primary h-11 px-6" onClick={startGenerateAll} disabled={renderingAll}>
+                  Generate Video from Storyboards
+                </button>
+              </div>
+
+              <table className="dd-table mt-3">
+                <thead>
+                  <tr>
+                    <th>Chapter / 章节</th>
+                    <th>Source Storyboard / 分镜源</th>
+                    <th>Video Generation / 视频生成</th>
+                    <th>Progress / 进度</th>
+                    <th>Est. Duration / 预计时长</th>
+                    <th>Actions / 操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {renderSections.map((section, idx) => (
+                    <tr key={section.id}>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <span className="dd-tab-index">{idx + 1}</span>
+                          <div className="min-w-0">
+                            <div className="dd-label-en truncate">{section.title}</div>
+                            <div className="dd-label-zh truncate">{steps.find((s) => s.id === section.id)?.title ?? ""}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`dd-status-pill ${statusClass(section.status)}`}>
+                          {section.status === "done" ? "Done" : section.status === "generating" ? "Generating..." : "Waiting"}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`dd-status-pill ${statusClass(section.status)}`}>
+                          {section.status === "done" ? "Done" : section.status === "generating" ? "Generating..." : "Waiting"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <div className="dd-progress-track w-28">
+                            <div className="dd-progress-fill" style={{ width: `${Math.round(section.progress ?? (section.status === "done" ? 100 : 0))}%` }} />
+                          </div>
+                          <span className="text-xs text-[var(--dd-text-muted)]">
+                            {Math.round(section.progress ?? (section.status === "done" ? 100 : 0))}%
+                          </span>
+                        </div>
+                      </td>
+                      <td>0:{String(section.durationSec).padStart(2, "0")}</td>
+                      <td>
+                        <div className="flex items-center gap-1">
+                          <button type="button" className="dd-icon-btn" onClick={() => void generateSection(section.id)} aria-label="Generate">
+                            ▶
+                          </button>
+                          <button type="button" className="dd-icon-btn" onClick={() => void manualRefresh(section.id)} aria-label="Refresh">
+                            ↺
+                          </button>
+                          {section.videoUrl ? (
+                            <a href={section.videoUrl} target="_blank" rel="noreferrer" className="dd-icon-btn" aria-label="Preview">
+                              ◉
+                            </a>
+                          ) : null}
+                          {section.videoUrl ? (
+                            <a
+                              href={section.videoUrl}
+                              download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_")}_${section.id}.mp4`}
+                              className="dd-icon-btn"
+                              aria-label="Download"
+                            >
+                              ↓
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="dd-export-grid mt-4">
+                <div className="dd-export-stats">
+                  <div className="dd-export-stat">
+                    <div className="text-sm text-[var(--dd-text-muted)]">Total Duration / 总时长</div>
+                    <div className="text-[32px] font-semibold mt-2">
+                      {Math.floor(totalDuration / 60)
+                        .toString()
+                        .padStart(2, "0")}
+                      :{String(totalDuration % 60).padStart(2, "0")}
                     </div>
                   </div>
-                  <span className="text-xs px-2 py-1 rounded-lg border border-[rgba(165,186,255,0.28)] text-[var(--dd-text-secondary)]">
-                    {section.status === "generating"
-                      ? `${section.apiState || "generating"}${typeof section.progress === "number" ? ` ${section.progress}%` : ""}`
-                      : section.status}
-                  </span>
-                  <button className="dd-btn-secondary h-9 px-3 text-xs" onClick={() => generateSection(section.id)}>
-                    {section.status === "done" ? "Regenerate" : "Generate"}
-                  </button>
-                  <button className="dd-btn-secondary h-9 px-3 text-xs" onClick={() => manualRefresh(section.id)}>
-                    Refresh
-                  </button>
-                  {section.videoUrl && (
-                    <>
-                      <a href={section.videoUrl} target="_blank" rel="noreferrer" className="dd-btn-secondary h-9 px-3 text-xs inline-flex items-center">
-                        Preview
-                      </a>
-                      <a
-                        href={section.videoUrl}
-                        download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_")}_${section.id}.mp4`}
-                        className="dd-btn-secondary h-9 px-3 text-xs inline-flex items-center"
-                      >
-                        Download
-                      </a>
-                    </>
-                  )}
+                  <div className="dd-export-stat">
+                    <div className="text-sm text-[var(--dd-text-muted)]">Chapters Completed / 已完成章节</div>
+                    <div className="text-[32px] font-semibold mt-2">
+                      {readyCount} / {renderSections.length}
+                    </div>
+                  </div>
+                  <div className="dd-export-stat">
+                    <div className="text-sm text-[var(--dd-text-muted)]">Export Readiness / 导出就绪度</div>
+                    <div className="text-[32px] font-semibold mt-2">{readiness}%</div>
+                  </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-6 pt-4 border-t border-[rgba(165,186,255,0.12)] flex justify-end items-center gap-3">
-              <button
-                onClick={combineAndExport}
-                className={`dd-btn-primary h-11 px-6 text-sm ${!allDone || combining ? "opacity-60 cursor-not-allowed" : ""}`}
-                disabled={!allDone || combining}
-              >
-                {combining ? "Combining..." : "Combine & Export"}
-              </button>
-              {exportUrl && exportName && (
-                <a href={exportUrl} download={exportName} className="dd-btn-secondary h-10 px-4 text-sm inline-flex items-center">
+                <button
+                  type="button"
+                  className={`dd-export-cta ${!allDone || combining ? "opacity-60 cursor-not-allowed" : ""}`}
+                  onClick={combineAndExport}
+                  disabled={!allDone || combining}
+                >
+                  <span className="text-4xl">🎬</span>
+                  <span>
+                    <span className="block text-[28px] font-semibold leading-tight">Combine & Export</span>
+                    <span className="block text-[17px] mt-1 opacity-90">Export final MP4 / 导出最终 MP4</span>
+                  </span>
+                  <span className="text-4xl">→</span>
+                </button>
+              </div>
+              {exportUrl && exportName ? (
+                <a href={exportUrl} download={exportName} className="dd-btn-secondary h-10 px-4 mt-3 inline-flex">
                   Download {exportName}
                 </a>
-              )}
-            </div>
-          </section>
+              ) : null}
+            </section>
+          </div>
         </section>
+
+        <AssistantPanel
+          title="AI Producer"
+          subtitle="AI 制作助手"
+          rightSlot={
+            <>
+              <button type="button" className="dd-icon-btn" aria-label="Pin panel">
+                ↗
+              </button>
+              <button type="button" className="dd-icon-btn" aria-label="Refresh panel">
+                ↺
+              </button>
+            </>
+          }
+          contextSlot={
+            <div className="dd-context-pill">
+              <div className="text-[16px]">Context: Generate & Export</div>
+              <div className="text-sm mt-1">当前阶段：生成与导出</div>
+            </div>
+          }
+          body={
+            <div className="space-y-3">
+              {assistantNotes.map((note, index) => (
+                <div key={`${note}-${index}`} className={index % 2 === 0 ? "dd-chat-ai" : "dd-chat-user"}>
+                  <div className="text-[17px] leading-7">{note}</div>
+                </div>
+              ))}
+              <div className="dd-chat-ai">
+                <div className="text-[17px] leading-7">
+                  {tr(
+                    "Use a consistent color palette, lighting, and camera language. I can also adjust pacing if needed.",
+                    "建议保持统一的色彩、光线和镜头语言。如需我也可以帮你调整节奏。",
+                  )}
+                </div>
+              </div>
+            </div>
+          }
+          footer={
+            <>
+              <div className="dd-chip-row mb-3">
+                {["More cinematic", "Keep visual consistency", "Add captions", "Shorter"].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    className="dd-chip"
+                    onClick={() =>
+                      setAssistantNotes((prev) => [...prev, `• ${chip} requested`])
+                    }
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+              <textarea className="dd-textarea min-h-24" placeholder="Ask anything about storyboards, pacing, or export..." />
+              <div className="mt-2 text-sm text-[var(--dd-text-muted)]">Enter to send · Shift+Enter for new line</div>
+            </>
+          }
+        />
       </main>
     </AppShell>
   );

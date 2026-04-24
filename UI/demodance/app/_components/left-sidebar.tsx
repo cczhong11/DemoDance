@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 type NavItem = {
+  id: string;
   href: string;
   labelEn: string;
   labelZh: string;
@@ -13,6 +14,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
+    id: "home",
     href: "/onboarding",
     labelEn: "Home",
     labelZh: "首页",
@@ -23,6 +25,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    id: "projects",
     href: "/workflow",
     labelEn: "Projects",
     labelZh: "项目管理",
@@ -33,6 +36,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    id: "templates",
     href: "/generate",
     labelEn: "Templates",
     labelZh: "模板中心",
@@ -43,6 +47,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    id: "brand",
     href: "/workflow",
     labelEn: "Brand Kit",
     labelZh: "品牌中心",
@@ -53,6 +58,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    id: "settings",
     href: "/workflow",
     labelEn: "Settings",
     labelZh: "设置中心",
@@ -67,15 +73,10 @@ const navItems: NavItem[] = [
   },
 ];
 
-function isNavActive(pathname: string, href: string): boolean {
-  if (href === "/onboarding") return pathname === "/onboarding";
-  if (href === "/workflow") return pathname === "/workflow" || pathname === "/workflow-v2" || pathname.startsWith("/workflow/");
-  if (href === "/generate") return pathname === "/generate";
-  return pathname === href;
-}
-
 export function LeftSidebar() {
   const pathname = usePathname();
+  const showProPlan = pathname !== "/onboarding";
+  const activeNavId = "home";
 
   return (
     <aside className="dd-sidebar">
@@ -94,47 +95,49 @@ export function LeftSidebar() {
 
       <nav className="dd-sidebar-card">
         {navItems.map((item) => {
-          const active = isNavActive(pathname, item.href);
+          const active = item.id === activeNavId;
           return (
             <Link
-              key={`${item.href}-${item.labelEn}`}
+              key={`${item.id}-${item.labelEn}`}
               href={item.href}
               className={`dd-nav-item ${active ? "active" : ""}`}
             >
               <span>{item.icon}</span>
               <span className="leading-tight">
-                <span className="dd-label-en">{item.labelEn}</span>
-                <span className="dd-label-zh">{item.labelZh}</span>
+                <span className="dd-nav-label-en">{item.labelEn}</span>
+                <span className="dd-nav-label-zh">{item.labelZh}</span>
               </span>
             </Link>
           );
         })}
       </nav>
 
-      <section className="dd-sidebar-card">
-        <div className="flex items-center gap-2">
-          <span className="dd-pro-badge" aria-hidden>
-            ★
-          </span>
-          <div>
-            <div className="dd-label-en">Pro Plan</div>
-            <div className="dd-label-zh">专业版</div>
+      {showProPlan ? (
+        <section className="dd-sidebar-card">
+          <div className="flex items-center gap-2">
+            <span className="dd-pro-badge" aria-hidden>
+              ★
+            </span>
+            <div>
+              <div className="dd-nav-label-en">Pro Plan</div>
+              <div className="dd-nav-label-zh">专业版</div>
+            </div>
           </div>
-        </div>
-        <div className="mt-3 text-sm text-[var(--dd-text-secondary)]">Unlimited exports</div>
-        <div className="text-sm text-[var(--dd-text-muted)]">无限导出</div>
-        <button type="button" className="dd-btn-primary mt-4 h-11 w-full text-sm">
-          Upgrade Plan
-        </button>
-      </section>
+          <div className="mt-3 text-sm text-[var(--dd-text-secondary)]">Unlimited exports</div>
+          <div className="text-sm text-[var(--dd-text-muted)]">无限导出</div>
+          <button type="button" className="dd-btn-primary mt-4 h-11 w-full text-sm">
+            Upgrade Plan
+          </button>
+        </section>
+      ) : null}
 
       <section className="dd-sidebar-card mt-auto">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="dd-team-avatar">D</span>
             <div>
-              <div className="dd-label-en">Demo Team</div>
-              <div className="dd-label-zh">演示团队</div>
+              <div className="dd-nav-label-en">Demo Team</div>
+              <div className="dd-nav-label-zh">演示团队</div>
             </div>
           </div>
           <span className="text-[var(--dd-text-muted)]">⌄</span>
