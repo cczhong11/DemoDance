@@ -72,6 +72,8 @@ export default function WorkflowPage() {
     allDone,
     updateField,
     fillStepFields,
+    getStepScript,
+    setStepScript,
     chat,
     setChat,
   } = useWorkflowStore();
@@ -115,6 +117,7 @@ export default function WorkflowPage() {
     try {
       const schema = activeStep.fields.map((field) => `  \"${field.key}\": \"string\"`).join(",\n");
       const current = activeStep.fields.map((field) => `${field.label}: ${field.value || "(empty)"}`).join("\n");
+      const currentScript = getStepScript(activeStep.id);
 
       const prompt = [
         "You are DemoDance copilot.",
@@ -123,9 +126,11 @@ export default function WorkflowPage() {
         `Current Step: ${activeStep.title}`,
         "Fill concise, practical launch-video copy for current step fields.",
         "JSON schema:",
-        `{\n${schema}\n}`,
+        `{\n${schema}${schema ? ",\n" : ""}  \"script\": \"string\"\n}`,
         "Current values:",
         current,
+        "Current script:",
+        currentScript || "(empty)",
       ].join("\n\n");
 
       const text = await callTextChat(prompt);
@@ -142,6 +147,9 @@ export default function WorkflowPage() {
         }
       }
       fillStepFields(activeStep.id, updates);
+      if (typeof parsed.script === "string" && parsed.script.trim()) {
+        setStepScript(activeStep.id, parsed.script.trim());
+      }
 
       setChat((prev) => [
         ...prev,
@@ -310,6 +318,7 @@ export default function WorkflowPage() {
   ];
 
   const activeStepUi = stepUiMap[activeStep.id];
+  const activeStepScript = getStepScript(activeStep.id);
 
   return (
     <AppShell>
@@ -520,6 +529,19 @@ export default function WorkflowPage() {
                   })}
                 </div>
               )}
+
+              <div className="mt-3">
+                <label className="block">
+                  <div className="text-xs text-[var(--dd-text-secondary)]">Script / Narration</div>
+                  <textarea
+                    className="dd-textarea mt-1 w-full min-h-52 px-3 py-2"
+                    value={activeStepScript}
+                    onChange={(e) => setStepScript(activeStep.id, e.target.value)}
+                    placeholder={tr("Write the spoken script for this step...", "填写这一段的视频旁白脚本...")}
+                  />
+                  <div className="text-xs text-[var(--dd-text-muted)] mt-1">{activeStepScript.length} / 2000</div>
+                </label>
+              </div>
 
               <div className="mt-5 pt-4 border-t border-[rgba(165,186,255,0.12)] flex items-center justify-between">
                 {prevStepId ? (

@@ -16,7 +16,7 @@ function toStrictArrayBuffer(data: unknown): ArrayBuffer {
 
 export default function GeneratePage() {
   const { tr, locale, setLocale } = useLocale();
-  const { projectName, steps, renderSections, setRenderSections } = useWorkflowStore();
+  const { projectName, steps, getStepScript, renderSections, setRenderSections } = useWorkflowStore();
   const [renderingAll, setRenderingAll] = useState(false);
   const [combining, setCombining] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -27,10 +27,12 @@ export default function GeneratePage() {
   function summarizeStep(stepId: string): string {
     const step = steps.find((s) => s.id === stepId);
     if (!step) return "";
-    return step.fields
+    const fieldsSummary = step.fields
       .map((field) => `${field.label}: ${field.value}`)
       .filter((line) => !line.endsWith(": "))
       .join("\n");
+    const script = getStepScript(step.id).trim();
+    return script ? `${fieldsSummary}\nScript: ${script}` : fieldsSummary;
   }
 
   function buildPrompt(sectionId: string): string {
