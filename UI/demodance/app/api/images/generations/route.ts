@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getOpenAIConfig } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -57,7 +58,8 @@ function getMimeTypeFromOutputFormat(value: unknown): string {
 }
 
 export async function POST(request: Request) {
-  const openaiApiKey = process.env.OPENAI_API_KEY ?? "";
+  const openai = getOpenAIConfig();
+  const openaiApiKey = openai.apiKey;
   const defaultImageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
 
   if (!openaiApiKey) {
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
   if (outputFormat) upstreamPayload.output_format = outputFormat;
 
   try {
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
+    const response = await fetch(`${openai.baseUrl}/images/generations`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

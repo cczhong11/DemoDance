@@ -1,11 +1,19 @@
 type ApiErrorPayload = {
   error?: unknown;
+  details?: unknown;
 };
 
 function readErrorMessage(data: unknown, fallback: string): string {
   if (data && typeof data === "object" && "error" in data) {
-    const maybe = (data as ApiErrorPayload).error;
-    if (typeof maybe === "string" && maybe.trim()) return maybe;
+    const payload = data as ApiErrorPayload;
+    const maybe = payload.error;
+    const details = payload.details;
+    if (typeof maybe === "string" && maybe.trim()) {
+      if (typeof details === "string" && details.trim()) {
+        return `${maybe}: ${details.trim()}`;
+      }
+      return maybe;
+    }
   }
   return fallback;
 }

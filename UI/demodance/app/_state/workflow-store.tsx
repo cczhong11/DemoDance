@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, startTransition, useContext, useEffect, useMemo, useState } from "react";
 
 import { useLocale } from "../locale-provider";
 import type { ChatMsg, Step, StepId } from "../home/types";
@@ -19,6 +19,8 @@ type SectionRender = {
   status: "idle" | "generating" | "done";
   durationSec: number;
   version: number;
+  storyboardFrames?: string[];
+  storyboardPrompt?: string;
   taskId?: string;
   apiState?: string;
   progress?: number;
@@ -89,33 +91,28 @@ function getDefaultRenderSections(): SectionRender[] {
   ];
 }
 
-function loadInitialState(): StoreState {
+function buildDefaultState(locale: "en" | "zh" = "en"): StoreState {
+  return {
+    projectName: "",
+    submission: "",
+    demoVideo: null,
+    activeStepId: "audience",
+    fieldValues: DEFAULT_FIELD_VALUES,
+    stepScripts: DEFAULT_STEP_SCRIPTS,
+    chat: getInitialChat(locale),
+    renderSections: getDefaultRenderSections(),
+  };
+}
+
+function loadStoredState(): StoreState {
   if (typeof window === "undefined") {
-    return {
-      projectName: "",
-      submission: "",
-      demoVideo: null,
-      activeStepId: "audience",
-      fieldValues: DEFAULT_FIELD_VALUES,
-      stepScripts: DEFAULT_STEP_SCRIPTS,
-      chat: getInitialChat("en"),
-      renderSections: getDefaultRenderSections(),
-    };
+    return buildDefaultState("en");
   }
 
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return {
-        projectName: "",
-        submission: "",
-        demoVideo: null,
-        activeStepId: "audience",
-        fieldValues: DEFAULT_FIELD_VALUES,
-        stepScripts: DEFAULT_STEP_SCRIPTS,
-        chat: getInitialChat("en"),
-        renderSections: getDefaultRenderSections(),
-      };
+      return buildDefaultState("en");
     }
 
     const parsed = JSON.parse(raw) as Partial<StoreState>;
@@ -163,17 +160,16 @@ function loadInitialState(): StoreState {
         : getDefaultRenderSections(),
     };
   } catch {
-    return {
-      projectName: "",
-      submission: "",
-      demoVideo: null,
-      activeStepId: "audience",
-      fieldValues: DEFAULT_FIELD_VALUES,
-      stepScripts: DEFAULT_STEP_SCRIPTS,
-      chat: getInitialChat("en"),
-      renderSections: getDefaultRenderSections(),
-    };
+    return buildDefaultState("en");
   }
+}
+
+function loadInitialState(): StoreState {
+  if (typeof window === "undefined") {
+    return buildDefaultState("en");
+  }
+
+  return buildDefaultState("en");
 }
 
 function persistState(next: StoreState) {
@@ -190,6 +186,12 @@ const WorkflowStoreContext = createContext<WorkflowStoreValue | null>(null);
 export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StoreState>(() => loadInitialState());
   const { locale } = useLocale();
+
+  useEffect(() => {
+    startTransition(() => {
+      setState(loadStoredState());
+    });
+  }, []);
 
   const steps = useMemo(() => {
     const templates = getInitialSteps(locale);

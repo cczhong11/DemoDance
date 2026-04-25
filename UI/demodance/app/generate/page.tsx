@@ -9,7 +9,7 @@ import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
 import { useWorkflowStore } from "../_state/workflow-store";
 import type { StepId } from "../home/types";
-import { buildSectionTaskContent, createVideoTask, loadVideoTaskStatus, summarizeStep } from "./_lib/generate-ai";
+import { buildSectionTaskContent, createVideoTask, generateStoryboardFrames, loadVideoTaskStatus, summarizeStep } from "./_lib/generate-ai";
 import { buildExportFileName, combineVideoUrls } from "./_lib/video-export";
 
 function statusClass(status: "idle" | "generating" | "done"): "waiting" | "generating" | "done" {
@@ -36,8 +36,8 @@ export default function GeneratePage() {
     ),
   ]);
 
-  const allDone = useMemo(() => renderSections.every((s) => s.status === "done"), [renderSections]);
-  const readyCount = useMemo(() => renderSections.filter((s) => s.status === "done").length, [renderSections]);
+  const allDone = useMemo(() => renderSections.every((s) => s.videoUrl), [renderSections]);
+  const readyCount = useMemo(() => renderSections.filter((s) => s.videoUrl).length, [renderSections]);
   const totalDuration = useMemo(() => renderSections.reduce((sum, section) => sum + section.durationSec, 0), [renderSections]);
   const readiness = useMemo(() => Math.round((readyCount / renderSections.length) * 100), [readyCount, renderSections.length]);
   const narrationText = useMemo(
@@ -79,7 +79,7 @@ export default function GeneratePage() {
     return `${blocks.join("\n\n")}\n`;
   }
 
-  async function generateSection(sectionId: StepId) {
+  async function generateStoryboardSection(sectionId: StepId) {
     const sectionSummary = summarizeStep(steps, getStepScript, sectionId);
     setRenderSections((prev) =>
       prev.map((item) =>
@@ -90,7 +90,47 @@ export default function GeneratePage() {
     );
 
     try {
-      const { content } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId, locale);
+      const { frames, prompt } = await generateStoryboardFrames(steps, getStepScript, projectName, sectionId, locale);
+      setRenderSections((prev) =>
+        prev.map((item) =>
+          item.id === sectionId
+            ? {
+                ...item,
+                status: "done",
+                storyboardFrames: frames,
+                storyboardPrompt: prompt,
+                version: item.version + 1,
+                apiState: "storyboard-ready",
+                progress: 100,
+              }
+            : item,
+        ),
+      );
+    } catch (e) {
+      const details = e instanceof Error ? e.message : String(e);
+      setRenderSections((prev) =>
+        prev.map((item) =>
+          item.id === sectionId
+            ? { ...item, status: item.storyboardFrames?.length ? "done" : "idle", apiState: `error: ${details}` }
+            : item,
+        ),
+      );
+    }
+  }
+
+  async function generateVideoSection(sectionId: StepId) {
+    const sectionSummary = summarizeStep(steps, getStepScript, sectionId);
+    setRenderSections((prev) =>
+      prev.map((item) =>
+        item.id === sectionId
+          ? { ...item, summary: sectionSummary, apiState: "video-queued", progress: 0 }
+          : item,
+      ),
+    );
+
+    try {
+      const storyboardFrames = renderSections.find((item) => item.id === sectionId)?.storyboardFrames ?? [];
+      const { content } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId, locale, storyboardFrames);
       const durationSec = renderSections.find((item) => item.id === sectionId)?.durationSec ?? 15;
       const taskId = await createVideoTask(content, durationSec);
 
@@ -138,7 +178,32 @@ export default function GeneratePage() {
     if (renderingAll) return;
     setRenderingAll(true);
     for (const section of renderSections) {
-      await generateSection(section.id);
+      await generateStoryboardSection(section.id);
+    }
+    setRenderingAll(false);
+  }
+
+  async function regenerateAllStoryboards() {
+    if (renderingAll) return;
+    setRenderingAll(true);
+    for (const section of renderSections) {
+      setRenderSections((prev) =>
+        prev.map((item) =>
+          item.id === section.id
+            ? { ...item, storyboardFrames: [], storyboardPrompt: undefined, progress: 0, status: "idle" }
+            : item,
+        ),
+      );
+      await generateStoryboardSection(section.id);
+    }
+    setRenderingAll(false);
+  }
+
+  async function startGenerateVideos() {
+    if (renderingAll) return;
+    setRenderingAll(true);
+    for (const section of renderSections) {
+      await generateVideoSection(section.id);
     }
     setRenderingAll(false);
   }
@@ -247,7 +312,7 @@ export default function GeneratePage() {
                   <button type="button" className="dd-btn-primary h-11 px-5" onClick={startGenerateAll} disabled={renderingAll}>
                     {renderingAll ? "Generating..." : "Generate Storyboards"}
                   </button>
-                  <button type="button" className="dd-btn-secondary h-11 px-4" onClick={startGenerateAll} disabled={renderingAll}>
+                  <button type="button" className="dd-btn-secondary h-11 px-4" onClick={regenerateAllStoryboards} disabled={renderingAll}>
                     Regenerate
                   </button>
                   <button type="button" className="dd-btn-secondary h-11 px-4">
@@ -270,14 +335,39 @@ export default function GeneratePage() {
                       </div>
                     </div>
                     <div className="dd-storyboard-preview mt-2">
-                      <div className="dd-storyboard-preview-grid">
-                        <div className="dd-storyboard-preview-tile" />
-                        <div className="dd-storyboard-preview-tile" />
-                        <div className="dd-storyboard-preview-tile" />
-                        <div className="dd-storyboard-preview-tile" />
-                      </div>
+                      {section.storyboardFrames?.length === 1 ? (
+                        <div className="dd-storyboard-preview-single">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={section.storyboardFrames[0]}
+                            alt={`${section.title} storyboard board`}
+                            className="dd-storyboard-preview-img"
+                          />
+                        </div>
+                      ) : (
+                        <div className="dd-storyboard-preview-grid">
+                          {Array.from({ length: 4 }).map((_, frameIdx) => {
+                            const frame = section.storyboardFrames?.[frameIdx];
+                            return frame ? (
+                              <div key={frame} className="dd-storyboard-preview-tile">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={frame}
+                                  alt={`${section.title} storyboard frame ${frameIdx + 1}`}
+                                  className="dd-storyboard-preview-img"
+                                />
+                              </div>
+                            ) : (
+                              <div key={frameIdx} className="dd-storyboard-preview-tile" />
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-2 text-sm text-[var(--dd-text-secondary)]">4 frames <span className="zh-only">/ 4 张分镜</span></div>
+                    <div className="mt-2 text-sm text-[var(--dd-text-secondary)]">
+                      {section.storyboardFrames?.length === 1 ? "1 storyboard board " : "4 frames "}
+                      <span className="zh-only">{section.storyboardFrames?.length === 1 ? "/ 1 张分镜板" : "/ 4 张分镜"}</span>
+                    </div>
                     <div className="mt-1 text-sm text-[var(--dd-text-muted)]">0:{String(section.durationSec).padStart(2, "0")}</div>
                     <div className={`dd-status-pill ${statusClass(section.status)} mt-2`}>
                       {section.status === "done"
@@ -285,6 +375,16 @@ export default function GeneratePage() {
                         : section.status === "generating"
                           ? `Generating... ${Math.round(section.progress ?? 0)}%`
                           : "Waiting"}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="dd-btn-secondary h-9 px-3 text-sm"
+                        onClick={() => void generateStoryboardSection(section.id)}
+                        disabled={section.status === "generating" || renderingAll}
+                      >
+                        {section.storyboardFrames?.length ? "Regenerate This Section" : "Generate This Section"}
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -300,7 +400,7 @@ export default function GeneratePage() {
                   </div>
                   <p className="dd-label-zh mt-1">视频生成</p>
                 </div>
-                <button type="button" className="dd-btn-primary h-11 px-6" onClick={startGenerateAll} disabled={renderingAll}>
+                <button type="button" className="dd-btn-primary h-11 px-6" onClick={startGenerateVideos} disabled={renderingAll}>
                   Generate Video from Storyboards
                 </button>
               </div>
@@ -334,24 +434,24 @@ export default function GeneratePage() {
                         </span>
                       </td>
                       <td>
-                        <span className={`dd-status-pill ${statusClass(section.status)}`}>
-                          {section.status === "done" ? "Done" : section.status === "generating" ? "Generating..." : "Waiting"}
+                        <span className={`dd-status-pill ${section.videoUrl ? "done" : (section.taskId || section.apiState === "video-queued") && !section.apiState?.startsWith("error") ? "generating" : "waiting"}`}>
+                          {section.videoUrl ? "Done" : (section.taskId || section.apiState === "video-queued") && !section.apiState?.startsWith("error") ? "Generating..." : "Waiting"}
                         </span>
                       </td>
                       <td>
                         <div className="flex items-center gap-2">
                           <div className="dd-progress-track w-28">
-                            <div className="dd-progress-fill" style={{ width: `${Math.round(section.progress ?? (section.status === "done" ? 100 : 0))}%` }} />
+                            <div className="dd-progress-fill" style={{ width: `${Math.round(section.progress ?? (section.videoUrl ? 100 : 0))}%` }} />
                           </div>
                           <span className="text-xs text-[var(--dd-text-muted)]">
-                            {Math.round(section.progress ?? (section.status === "done" ? 100 : 0))}%
+                            {Math.round(section.progress ?? (section.videoUrl ? 100 : 0))}%
                           </span>
                         </div>
                       </td>
                       <td>0:{String(section.durationSec).padStart(2, "0")}</td>
                       <td>
-                        <div className="flex items-center gap-1">
-                          <button type="button" className="dd-icon-btn" onClick={() => void generateSection(section.id)} aria-label="Generate">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button type="button" className="dd-icon-btn" onClick={() => void generateVideoSection(section.id)} aria-label="Generate">
                             <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                           </button>
                           <button type="button" className="dd-icon-btn" onClick={() => void manualRefresh(section.id)} aria-label="Refresh">
@@ -370,6 +470,15 @@ export default function GeneratePage() {
                               aria-label="Download"
                             >
                               <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7zM5 18v2h14v-2z"/></svg>
+                            </a>
+                          ) : null}
+                          {section.videoUrl ? (
+                            <a
+                              href={section.videoUrl}
+                              download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_")}_${section.id}.mp4`}
+                              className="dd-btn-secondary h-9 px-3 text-sm"
+                            >
+                              Download Clip
                             </a>
                           ) : null}
                         </div>

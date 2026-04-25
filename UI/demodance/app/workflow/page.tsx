@@ -13,6 +13,7 @@ import { useWorkflowStore } from "../_state/workflow-store";
 import {
   buildChatPrompt,
   buildLogoPrompt,
+  buildScriptPrompt,
   buildSuggestPrompt,
   callJsonTextChat,
   callTextChat,
@@ -44,6 +45,7 @@ export default function WorkflowPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [aiSuggestLoading, setAiSuggestLoading] = useState(false);
+  const [scriptGenerating, setScriptGenerating] = useState(false);
   const [logoGenerating, setLogoGenerating] = useState(false);
 
   const activeStep = steps.find((step) => step.id === activeStepId) ?? steps[0];
@@ -157,6 +159,44 @@ export default function WorkflowPage() {
       setChatError(error instanceof Error ? error.message : String(error));
     } finally {
       setLogoGenerating(false);
+    }
+  }
+
+  async function generateStepScript() {
+    if (scriptGenerating) return;
+
+    setScriptGenerating(true);
+    setChatError(null);
+
+    try {
+      const prompt = buildScriptPrompt(locale, activeStep, getStepScript(activeStep.id));
+      const text = await callJsonTextChat(prompt);
+      const { script } = readSuggestUpdates(activeStep, text);
+      if (!script) {
+        throw new Error(tr("AI returned an empty script.", "AI 返回了空脚本。"));
+      }
+      setStepScript(activeStep.id, script);
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          tag: tr("Script Generated", "脚本已生成"),
+          text: tr("I drafted the narration for this step. Give it a quick polish if you want a different tone.", "我已经为这一节起草了旁白脚本，你可以再微调语气。"),
+        },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setChatError(message);
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          tag: tr("Script Failed", "脚本生成失败"),
+          text: tr(`I couldn't generate the script for this step (${message}).`, `这一节脚本生成失败（${message}）。`),
+        },
+      ]);
+    } finally {
+      setScriptGenerating(false);
     }
   }
 
@@ -285,7 +325,17 @@ export default function WorkflowPage() {
 
                       <div className="flex flex-col">
                         <label className="block h-full flex flex-col">
-                          <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration <span className="text-[14px] ml-1 text-[var(--dd-text-muted)] zh-only">开场脚本 / 旁白</span></div>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration <span className="text-[14px] ml-1 text-[var(--dd-text-muted)] zh-only">开场脚本 / 旁白</span></div>
+                            <button
+                              type="button"
+                              onClick={generateStepScript}
+                              disabled={scriptGenerating}
+                              className={`dd-btn-secondary h-9 px-3 text-sm ${scriptGenerating ? "opacity-60 cursor-not-allowed" : ""}`}
+                            >
+                              {scriptGenerating ? tr("Generating...", "生成中...") : tr("Generate Script", "生成脚本")}
+                            </button>
+                          </div>
                           <textarea
                             className="dd-textarea flex-1 mt-2 text-lg leading-7"
                             value={activeStepScript}
@@ -300,7 +350,7 @@ export default function WorkflowPage() {
                 ) : (
                   <div className="mt-5 grid grid-cols-2 gap-4">
                     {activeStep.fields.map((field) => {
-                      const longText = field.key === "impact" || field.key === "stack" || field.value.length > 120;
+                      const longText = field.key === "impact" || field.key === "stack" || field.key === "evidence" || field.value.length > 120;
                       return (
                         <label key={field.key} className={`block ${longText ? "col-span-2" : ""}`}>
                           <div className="text-[17px] text-[var(--dd-text-secondary)]">{field.label}</div>
@@ -330,7 +380,17 @@ export default function WorkflowPage() {
 
                 {activeStep.id !== "product" ? (
                   <label className="block mt-5">
-                    <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[17px] text-[var(--dd-text-secondary)]">Script / Narration</div>
+                      <button
+                        type="button"
+                        onClick={generateStepScript}
+                        disabled={scriptGenerating}
+                        className={`dd-btn-secondary h-9 px-3 text-sm ${scriptGenerating ? "opacity-60 cursor-not-allowed" : ""}`}
+                      >
+                        {scriptGenerating ? tr("Generating...", "生成中...") : tr("Generate Script", "生成脚本")}
+                      </button>
+                    </div>
                     <textarea
                       className="dd-textarea min-h-56 mt-2 text-lg leading-7"
                       value={activeStepScript}

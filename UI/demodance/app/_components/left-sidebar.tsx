@@ -89,7 +89,7 @@ export function LeftSidebar() {
     <aside className="dd-sidebar">
       <div className="dd-sidebar-logo">
         <div className="w-8 h-8 flex shrink-0 items-center justify-center mr-2">
-          <Image src={logoImage} alt="DemoDance Logo" height={28} className="w-auto h-7 object-contain" unoptimized />
+          <Image src={logoImage} alt="DemoDance Logo" width={28} height={28} className="w-auto h-7 object-contain" unoptimized />
         </div>
         <div className="dd-logo-text">DemoDance</div>
         <button type="button" className="dd-collapse-btn" aria-label="Collapse sidebar">

@@ -27,6 +27,7 @@ export function fieldCounter(fieldKey: string): number {
   if (fieldKey === "name") return 60;
   if (fieldKey === "slogan") return 80;
   if (fieldKey === "logo") return 800;
+  if (fieldKey === "evidence") return 600;
   if (fieldKey === "stack") return 320;
   return 2000;
 }
@@ -52,7 +53,8 @@ export async function callJsonTextChat(prompt: string): Promise<string> {
 function stepGuidance(stepId: StepId): string {
   const guidance: Record<StepId, string> = {
     audience: "Fields must identify a specific target user and one concrete problem they feel often.",
-    importance: "Field must describe an evidence angle from provided context only. Do not invent citations, numbers, URLs, or external research.",
+    importance:
+      "Field must describe an evidence angle from provided context only. Write 2 to 4 full sentences that explain signal, urgency, or demo proof with enough substance to sound persuasive. Do not invent citations, numbers, URLs, or external research.",
     product: "Fields must make the product easy to remember: short name, sticky slogan, and logo prompt/context if needed.",
     features: "Each feature must be one sentence with user action, system response, and user value.",
     tech: "Explain stack and model/API flow in a way a technical judge can understand quickly.",
@@ -72,11 +74,38 @@ export function buildSuggestPrompt(locale: "en" | "zh", activeStep: Step, curren
     `Current Step: ${activeStep.title}`,
     "Fill concise, practical launch-video copy for current step fields.",
     stepGuidance(activeStep.id),
+    activeStep.id === "importance"
+      ? "For Evidence Angle specifically, avoid one-liners. Expand it into a compact but convincing paragraph."
+      : "",
     "If a current value is not empty, improve it while preserving its facts instead of replacing it with unrelated claims.",
     "JSON schema:",
     `{\n${schema}${schema ? ",\n" : ""}  "script": "string"\n}`,
     "Current values:",
     current,
+    "Current script:",
+    currentScript || "(empty)",
+  ].join("\n\n");
+}
+
+export function buildScriptPrompt(locale: "en" | "zh", activeStep: Step, currentScript: string): string {
+  const context = activeStep.fields.map((field) => `${field.label}: ${field.value || "(empty)"}`).join("\n");
+  return [
+    "You are DemoDance copilot.",
+    "Return only JSON object, no markdown.",
+    `Locale: ${locale}`,
+    locale === "zh" ? "Write the script in Chinese." : "Write the script in English.",
+    `Current Step: ${activeStep.title}`,
+    "Task: write a concise spoken narration for this single video chapter.",
+    "Requirements:",
+    "- Keep it natural for voiceover, not slide text.",
+    "- Mention only facts supported by current field values.",
+    "- Make it sound polished and launch-ready.",
+    "- Target length: 2 to 4 spoken sentences.",
+    "- Do not write the full video script, only this step.",
+    "JSON schema:",
+    '{\n  "script": "string"\n}',
+    "Current values:",
+    context,
     "Current script:",
     currentScript || "(empty)",
   ].join("\n\n");
@@ -133,7 +162,6 @@ export async function requestLogoUrl(prompt: string): Promise<string> {
       size: "1024x1024",
       quality: "low",
       output_format: "webp",
-      background: "transparent",
     },
     "Failed to generate logo",
   );

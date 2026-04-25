@@ -54,10 +54,27 @@ type VideoTaskStatusResponse = {
   error?: unknown;
 };
 
-export type VideoTaskContent = {
-  type: "text";
-  text: string;
+type ImageGenerationResponse = {
+  data?: Array<{
+    url?: unknown;
+    b64_json?: unknown;
+    mime_type?: unknown;
+  }>;
+  error?: unknown;
 };
+
+export type VideoTaskContent =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "image_url";
+      image_url: {
+        url: string;
+      };
+      role: "reference_image";
+    };
 
 export type VideoTaskStatus = {
   state: string;
@@ -66,11 +83,29 @@ export type VideoTaskStatus = {
   raw: unknown;
 };
 
+const sectionOrder: StepId[] = ["audience", "importance", "product", "features", "tech", "impact"];
+
+const relevantSectionMap: Record<StepId, StepId[]> = {
+  audience: ["audience"],
+  importance: ["audience", "importance"],
+  product: ["audience", "importance", "product"],
+  features: ["product", "features"],
+  tech: ["product", "features", "tech"],
+  impact: ["product", "features", "impact"],
+};
+
 export function summarizeStep(steps: Step[], getStepScript: (stepId: StepId) => string, stepId: StepId): string {
   const step = steps.find((item) => item.id === stepId);
   if (!step) return "";
   const fieldsSummary = step.fields
-    .map((field) => `${field.label}: ${field.value}`)
+    .map((field) => {
+      const rawValue = typeof field.value === "string" ? field.value.trim() : "";
+      if (!rawValue) return `${field.label}: `;
+      if (field.key === "logo") {
+        return `${field.label}: ${rawValue.startsWith("data:image/") ? "[generated logo image attached separately]" : rawValue}`;
+      }
+      return `${field.label}: ${rawValue}`;
+    })
     .filter((line) => !line.endsWith(": "))
     .join("\n");
   const script = getStepScript(step.id).trim();
@@ -81,6 +116,25 @@ function getStepField(steps: Step[], stepId: StepId, fieldKey: string): string {
   const step = steps.find((item) => item.id === stepId);
   const field = step?.fields.find((item) => item.key === fieldKey);
   return typeof field?.value === "string" ? field.value.trim() : "";
+}
+
+function buildAllSectionsContext(
+  steps: Step[],
+  getStepScript: (stepId: StepId) => string,
+  currentSectionId: StepId,
+): string[] {
+  const relevantSections = new Set(relevantSectionMap[currentSectionId] ?? [currentSectionId]);
+
+  return sectionOrder
+    .filter((stepId) => relevantSections.has(stepId))
+    .map((stepId) => {
+      const step = steps.find((item) => item.id === stepId);
+      const summary = summarizeStep(steps, getStepScript, stepId).trim();
+      if (!step || !summary) return "";
+      const prefix = stepId === currentSectionId ? "[Current Chapter]" : "[Supporting Context]";
+      return `${prefix} ${step.title}: ${summary.replace(/\n+/g, " | ")}`;
+    })
+    .filter(Boolean);
 }
 
 function buildPromptContext(
@@ -132,6 +186,7 @@ export async function buildSectionTaskContent(
   projectName: string,
   sectionId: StepId,
   language: LocaleCode,
+  storyboardFrames: string[] = [],
 ): Promise<{ summary: string; content: VideoTaskContent[] }> {
   const summary = summarizeStep(steps, getStepScript, sectionId);
   const sectionTitle = steps.find((item) => item.id === sectionId)?.title ?? sectionId;
@@ -141,6 +196,38 @@ export async function buildSectionTaskContent(
     callPromptComposer("/api/scene/prompt", payload),
     callPromptComposer("/api/voice/prompt", payload),
   ]);
+
+  const referenceImages: VideoTaskContent[] = storyboardFrames
+    .filter((frame) => typeof frame === "string" && frame.trim())
+    .map((frame) => ({
+      type: "image_url",
+      image_url: { url: frame },
+      role: "reference_image",
+    }));
+
+  const logoUrl = sectionId === "product" ? getStepField(steps, "product", "logo") : "";
+  if (logoUrl) {
+    referenceImages.push({
+      type: "image_url",
+      image_url: { url: logoUrl },
+      role: "reference_image",
+    });
+  }
+
+  const referenceNotes: string[] = [];
+  if (referenceImages.length > 0) {
+    const storyboardCount = storyboardFrames.filter(Boolean).length;
+    if (storyboardCount > 0) {
+      referenceNotes.push(
+        `Use [Image 1]${storyboardCount > 1 ? ` through [Image ${storyboardCount}]` : ""} as storyboard reference images for shot composition, pacing, and visual continuity.`,
+      );
+    }
+    if (logoUrl) {
+      referenceNotes.push(
+        `Use [Image ${referenceImages.length}] as the brand logo reference. In this Product Intro chapter, keep the logo shape, color, and brand feel recognizable when it appears in UI, packaging, splash screen, or title-card moments.`,
+      );
+    }
+  }
 
   return {
     summary,
@@ -154,14 +241,84 @@ export async function buildSectionTaskContent(
           "Use this section summary as the highest-priority context:",
           summary || "(empty)",
           "",
+          ...referenceNotes,
+          ...(referenceNotes.length > 0 ? [""] : []),
           "Final instruction: generate only this section/chapter, not the full product video.",
         ].join("\n"),
       },
       { type: "text", text: `Story Prompt\n${storyPrompt}` },
       { type: "text", text: `Scene Prompt\n${scenePrompt}` },
       { type: "text", text: `Voice Prompt\n${voicePrompt}` },
+      ...referenceImages,
     ],
   };
+}
+
+export async function generateStoryboardFrames(
+  steps: Step[],
+  getStepScript: (stepId: StepId) => string,
+  projectName: string,
+  sectionId: StepId,
+  language: LocaleCode,
+): Promise<{ prompt: string; frames: string[] }> {
+  const summary = summarizeStep(steps, getStepScript, sectionId);
+  const sectionTitle = steps.find((item) => item.id === sectionId)?.title ?? sectionId;
+  const payload = buildPromptContext(steps, getStepScript, projectName, language, sectionId, sectionTitle, summary);
+  const scenePrompt = await callPromptComposer("/api/scene/prompt", payload);
+  const allSectionsContext = buildAllSectionsContext(steps, getStepScript, sectionId);
+  const prompt = [
+    "Create one single 2x2 storyboard board for exactly one chapter of a hackathon product demo video.",
+    `Project: ${(projectName || "DemoDance").trim()}`,
+    `Chapter: ${sectionTitle}`,
+    `Only depict this chapter: ${sectionTitle}. Do not include scenes, claims, or transitions from other chapters.`,
+    allSectionsContext.length > 0
+      ? "Use only the relevant section context below from the workflow step as narrative grounding. The current chapter is the only one you should directly depict; the other sections are supporting context for continuity and positioning."
+      : "",
+    ...(allSectionsContext.length > 0 ? allSectionsContext : []),
+    ...(allSectionsContext.length > 0 ? [""] : []),
+    "Visual format: 16:9 cinematic storyboard frame, clean product-demo composition, readable UI surfaces, consistent lighting, polished but not poster-like.",
+    "Output exactly one image containing a clean 2x2 storyboard layout.",
+    "The four panels inside that single image should stay within this single chapter and show: chapter opening, primary action, supporting proof/detail, chapter close.",
+    "Keep the panel spacing and composition clear so it reads as one storyboard board.",
+    "Avoid text-heavy layouts, logos, watermarks, subtitles, and UI text that would be unreadable at small size.",
+    "",
+    "Chapter summary:",
+    summary || "(empty)",
+    "",
+    "Scene guidance:",
+    scenePrompt,
+  ].join("\n");
+  const result = await postJson<ImageGenerationResponse>(
+    "/api/images/generations",
+    {
+      model: "gpt-image-2",
+      prompt,
+      n: 1,
+      aspect_ratio: "16:9",
+      size: "1536x1024",
+      quality: "low",
+      output_format: "webp",
+      response_format: "url",
+    },
+    "Failed to generate storyboard images",
+  );
+
+  const frames = (Array.isArray(result.data) ? result.data : [])
+    .map((item) => {
+      if (typeof item.url === "string" && item.url) return item.url;
+      if (typeof item.b64_json === "string" && item.b64_json) {
+        const mimeType = typeof item.mime_type === "string" && item.mime_type ? item.mime_type : "image/webp";
+        return `data:${mimeType};base64,${item.b64_json}`;
+      }
+      return "";
+    })
+    .filter(Boolean);
+
+  if (frames.length === 0) {
+    throw new Error("No storyboard images returned");
+  }
+
+  return { prompt, frames };
 }
 
 export async function createVideoTask(content: VideoTaskContent[], durationSec: number): Promise<string> {
