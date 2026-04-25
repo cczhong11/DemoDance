@@ -19,12 +19,15 @@ function statusClass(status: "idle" | "generating" | "done"): "waiting" | "gener
 }
 
 export default function GeneratePage() {
-  const { tr } = useLocale();
+  const { tr, locale } = useLocale();
   const { projectName, steps, getStepScript, renderSections, setRenderSections } = useWorkflowStore();
   const [renderingAll, setRenderingAll] = useState(false);
   const [combining, setCombining] = useState(false);
+  const [voiceoverGenerating, setVoiceoverGenerating] = useState(false);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [exportName, setExportName] = useState<string | null>(null);
+  const [voiceoverSrc, setVoiceoverSrc] = useState<string | null>(null);
+  const [srtUrl, setSrtUrl] = useState<string | null>(null);
   const [assistantNotes, setAssistantNotes] = useState<string[]>([
     tr("Great job! You're now working with storyboard patches for each chapter.", "做得很好！你现在在为每个章节生成分镜批次。"),
     tr(
@@ -37,6 +40,44 @@ export default function GeneratePage() {
   const readyCount = useMemo(() => renderSections.filter((s) => s.status === "done").length, [renderSections]);
   const totalDuration = useMemo(() => renderSections.reduce((sum, section) => sum + section.durationSec, 0), [renderSections]);
   const readiness = useMemo(() => Math.round((readyCount / renderSections.length) * 100), [readyCount, renderSections.length]);
+  const narrationText = useMemo(
+    () =>
+      renderSections
+        .map((section) => {
+          const script = getStepScript(section.id).trim();
+          if (script) return script;
+          const step = steps.find((item) => item.id === section.id);
+          return step?.fields.map((field) => field.value).filter(Boolean).join(". ") ?? "";
+        })
+        .filter(Boolean)
+        .join("\n\n"),
+    [getStepScript, renderSections, steps],
+  );
+
+  function formatSrtTime(totalSeconds: number) {
+    const safe = Math.max(0, totalSeconds);
+    const hours = Math.floor(safe / 3600);
+    const minutes = Math.floor((safe % 3600) / 60);
+    const seconds = Math.floor(safe % 60);
+    const millis = Math.round((safe - Math.floor(safe)) * 1000);
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
+  }
+
+  function buildSrtFromNarration() {
+    let cursor = 0;
+    const blocks = renderSections.flatMap((section, index) => {
+      const text = getStepScript(section.id).trim();
+      if (!text) {
+        cursor += section.durationSec;
+        return [];
+      }
+      const start = cursor;
+      const end = cursor + section.durationSec;
+      cursor = end;
+      return [`${index + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${text.replace(/\s+/g, " ").trim()}`];
+    });
+    return `${blocks.join("\n\n")}\n`;
+  }
 
   async function generateSection(sectionId: StepId) {
     const sectionSummary = summarizeStep(steps, getStepScript, sectionId);
@@ -49,8 +90,9 @@ export default function GeneratePage() {
     );
 
     try {
-      const { content } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId);
-      const taskId = await createVideoTask(content);
+      const { content } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId, locale);
+      const durationSec = renderSections.find((item) => item.id === sectionId)?.durationSec ?? 15;
+      const taskId = await createVideoTask(content, durationSec);
 
       setRenderSections((prev) => prev.map((item) => (item.id === sectionId ? { ...item, taskId } : item)));
 
@@ -137,6 +179,44 @@ export default function GeneratePage() {
       alert(tr("Failed to combine videos.", "视频拼接失败。"));
     } finally {
       setCombining(false);
+    }
+  }
+
+  async function generateVoiceoverAssets() {
+    if (voiceoverGenerating || !narrationText.trim()) return;
+    setVoiceoverGenerating(true);
+
+    try {
+      const response = await fetch("/api/audio/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: narrationText,
+          base64: true,
+        }),
+      });
+      const data = (await response.json()) as { audio_base64?: string; mime_type?: string; error?: unknown };
+      if (!response.ok || !data.audio_base64) {
+        throw new Error(typeof data.error === "string" ? data.error : "Failed to generate voiceover");
+      }
+
+      const audioUrl = `data:${data.mime_type ?? "audio/wav"};base64,${data.audio_base64}`;
+      setVoiceoverSrc(audioUrl);
+
+      if (srtUrl) URL.revokeObjectURL(srtUrl);
+      const nextSrtUrl = URL.createObjectURL(new Blob([buildSrtFromNarration()], { type: "text/plain;charset=utf-8" }));
+      setSrtUrl(nextSrtUrl);
+      setAssistantNotes((prev) => [
+        ...prev,
+        locale === "zh" ? "• 已生成旁白音频和本地 SRT 字幕。" : "• Voiceover audio and local SRT captions are ready.",
+      ]);
+    } catch (error) {
+      setAssistantNotes((prev) => [
+        ...prev,
+        `${locale === "zh" ? "• 旁白生成失败：" : "• Voiceover failed: "}${error instanceof Error ? error.message : String(error)}`,
+      ]);
+    } finally {
+      setVoiceoverGenerating(false);
     }
   }
 
@@ -341,6 +421,22 @@ export default function GeneratePage() {
                   Download {exportName}
                 </a>
               ) : null}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={`dd-btn-secondary h-10 px-4 ${voiceoverGenerating || !narrationText.trim() ? "opacity-60 cursor-not-allowed" : ""}`}
+                  onClick={generateVoiceoverAssets}
+                  disabled={voiceoverGenerating || !narrationText.trim()}
+                >
+                  {voiceoverGenerating ? "Generating Voiceover..." : "Generate Voiceover + SRT"}
+                </button>
+                {voiceoverSrc ? <audio controls src={voiceoverSrc} className="h-10" /> : null}
+                {srtUrl ? (
+                  <a href={srtUrl} download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_")}.srt`} className="dd-btn-secondary h-10 px-4">
+                    Download SRT
+                  </a>
+                ) : null}
+              </div>
             </section>
           </div>
         </section>

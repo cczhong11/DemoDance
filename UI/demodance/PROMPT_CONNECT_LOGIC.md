@@ -116,14 +116,13 @@ Behavior:
 - Accepts either:
   - `messages` (array), or
   - `prompt` (string; wrapped into one user message)
-- Forwards to IonRouter: `POST {baseUrl}/chat/completions`
-- Uses configured model from request or server defaults.
+- Forwards to OpenAI: `POST {OPENAI_BASE_URL}/chat/completions`
+- Uses configured model from request or server defaults. The default text model is `OPENAI_TEXT_MODEL`, falling back to `gpt-5.4-mini`.
 
 Empty-content handling:
 
-1. First request executes with normal temperature.
+1. First request executes with the requested model and token budget.
 2. If assistant text is empty, route retries with:
-   - lower temperature
    - one additional user instruction requesting final strict JSON output.
 
 This improves robustness for structured prompt calls from onboarding/workflow.
@@ -170,10 +169,10 @@ Files:
 
 Behavior:
 
-- Loads prompt fragments from `/prompt/*.md`.
+- Uses TypeScript prompt constants as the runtime source of truth. Markdown prompt drafts are archived under `docs/prompts-archive/` and are not loaded at runtime.
 - Composes deterministic long-form prompts by combining:
   - fixed rubric/format constraints
-  - runtime inputs (title, product, script, etc.)
+  - runtime inputs (section, title, product, script, language, etc.)
 - Returns assembled prompt text for downstream generation steps.
 
 These routes are the structured, reusable prompt layer for story/scene/voice pipelines.

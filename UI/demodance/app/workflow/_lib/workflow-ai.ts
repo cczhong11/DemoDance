@@ -38,6 +38,29 @@ export async function callTextChat(prompt: string): Promise<string> {
   return text;
 }
 
+export async function callJsonTextChat(prompt: string): Promise<string> {
+  const data = await postJson<TextChatResponse>(
+    "/api/text/chat",
+    { prompt, mode: "json", max_completion_tokens: 2500 },
+    "Text API failed",
+  );
+  const text = readAssistantText(data);
+  if (!text.trim()) throw new Error("Empty response from text model");
+  return text;
+}
+
+function stepGuidance(stepId: StepId): string {
+  const guidance: Record<StepId, string> = {
+    audience: "Fields must identify a specific target user and one concrete problem they feel often.",
+    importance: "Field must describe an evidence angle from provided context only. Do not invent citations, numbers, URLs, or external research.",
+    product: "Fields must make the product easy to remember: short name, sticky slogan, and logo prompt/context if needed.",
+    features: "Each feature must be one sentence with user action, system response, and user value.",
+    tech: "Explain stack and model/API flow in a way a technical judge can understand quickly.",
+    impact: "Describe a specific future direction and practical impact. Avoid generic world-changing claims.",
+  };
+  return guidance[stepId];
+}
+
 export function buildSuggestPrompt(locale: "en" | "zh", activeStep: Step, currentScript: string): string {
   const schema = activeStep.fields.map((field) => `  "${field.key}": "string"`).join(",\n");
   const current = activeStep.fields.map((field) => `${field.label}: ${field.value || "(empty)"}`).join("\n");
@@ -45,8 +68,11 @@ export function buildSuggestPrompt(locale: "en" | "zh", activeStep: Step, curren
     "You are DemoDance copilot.",
     "Return only JSON object, no markdown.",
     `Locale: ${locale}`,
+    locale === "zh" ? "All field values and script must be written in Chinese." : "All field values and script must be written in English.",
     `Current Step: ${activeStep.title}`,
     "Fill concise, practical launch-video copy for current step fields.",
+    stepGuidance(activeStep.id),
+    "If a current value is not empty, improve it while preserving its facts instead of replacing it with unrelated claims.",
     "JSON schema:",
     `{\n${schema}${schema ? ",\n" : ""}  "script": "string"\n}`,
     "Current values:",
@@ -89,8 +115,10 @@ export function buildLogoPrompt(name: string, slogan: string): string {
   return [
     `Create a clean, modern app logo for a product named "${name || "DemoDance"}".`,
     slogan ? `Tagline/context: ${slogan}.` : "",
-    "Style: minimal, bold, high contrast, icon-first mark.",
-    "No complex text blocks. Avoid photorealism.",
+    "Style: minimal, bold, high contrast, icon-first mark, centered with generous safe margin.",
+    "No readable text, no letters, no words, no complex text blocks.",
+    "Use a transparent or simple solid background. Must remain legible at 64px.",
+    "Avoid photorealism.",
   ]
     .filter(Boolean)
     .join(" ");
@@ -105,6 +133,7 @@ export async function requestLogoUrl(prompt: string): Promise<string> {
       size: "1024x1024",
       quality: "low",
       output_format: "webp",
+      background: "transparent",
     },
     "Failed to generate logo",
   );

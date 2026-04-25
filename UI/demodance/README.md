@@ -13,6 +13,23 @@ npm run dev
 
 App runs at `http://localhost:3000`.
 
+## Automated demo recording
+
+```bash
+cd UI/demodance
+npm run record:demo
+```
+
+The recorder starts a local Next.js dev server on `http://localhost:3100`, drives the browser through onboarding, workflow, and generation screens, then writes a `.webm` file to `recordings/`.
+
+Useful overrides:
+
+```bash
+PORT=3000 DEMODANCE_RECORD_BASE_URL=http://localhost:3000 npm run record:demo
+HEADED=1 npm run record:demo
+RECORD_WIDTH=1280 RECORD_HEIGHT=720 npm run record:demo
+```
+
 ## Current UX Overview (当前 UX 介绍)
 
 DemoDance 当前体验是一个从 `raw demo` 到 `launch video` 的单页流程，默认分为两段：
@@ -25,7 +42,7 @@ DemoDance 当前体验是一个从 `raw demo` 到 `launch video` 的单页流程
 2. Workflow（脚本与生成）
    - 左侧是 6 步脚本卡片：
      1) 目标用户与问题
-     2) 问题重要性（联网证据）
+     2) 问题重要性（证据角度）
      3) 产品亮相（Logo/Name/Slogan）
      4) 功能介绍
      5) 技术栈
@@ -133,6 +150,8 @@ Current pushed schema includes:
 ## Examples
 
 ### Text chat
+
+Uses OpenAI Chat Completions with `OPENAI_TEXT_MODEL` (default `gpt-5.4-mini`) and requires `OPENAI_API_KEY`.
 
 ```bash
 curl -X POST http://localhost:3000/api/text/chat \

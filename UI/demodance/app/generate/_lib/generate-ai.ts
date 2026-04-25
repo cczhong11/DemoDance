@@ -1,8 +1,12 @@
 import { getJson, postJson } from "@/app/_lib/client-api";
-import type { Step, StepId } from "@/app/home/types";
+import type { LocaleCode, Step, StepId } from "@/app/home/types";
 
 type PromptComposeBody = {
   includeTechnicalArchitecture: boolean;
+  language: LocaleCode;
+  sectionId?: StepId;
+  sectionTitle?: string;
+  sectionSummary?: string;
   user: string;
   targetUser: string;
   problem: string;
@@ -83,6 +87,10 @@ function buildPromptContext(
   steps: Step[],
   getStepScript: (stepId: StepId) => string,
   projectName: string,
+  language: LocaleCode,
+  sectionId?: StepId,
+  sectionTitle?: string,
+  sectionSummary?: string,
 ): PromptComposeBody {
   const features = ["feature1", "feature2", "feature3"]
     .map((key) => getStepField(steps, "features", key))
@@ -90,6 +98,10 @@ function buildPromptContext(
 
   return {
     includeTechnicalArchitecture: getStepScript("tech").trim().length > 0 || getStepField(steps, "tech", "stack").length > 0,
+    language,
+    sectionId,
+    sectionTitle,
+    sectionSummary,
     user: getStepField(steps, "audience", "user"),
     targetUser: getStepField(steps, "audience", "user"),
     problem: getStepField(steps, "audience", "problem"),
@@ -119,10 +131,11 @@ export async function buildSectionTaskContent(
   getStepScript: (stepId: StepId) => string,
   projectName: string,
   sectionId: StepId,
+  language: LocaleCode,
 ): Promise<{ summary: string; content: VideoTaskContent[] }> {
   const summary = summarizeStep(steps, getStepScript, sectionId);
   const sectionTitle = steps.find((item) => item.id === sectionId)?.title ?? sectionId;
-  const payload = buildPromptContext(steps, getStepScript, projectName);
+  const payload = buildPromptContext(steps, getStepScript, projectName, language, sectionId, sectionTitle, summary);
   const [storyPrompt, scenePrompt, voicePrompt] = await Promise.all([
     callPromptComposer("/api/story/prompt", payload),
     callPromptComposer("/api/scene/prompt", payload),
@@ -140,6 +153,8 @@ export async function buildSectionTaskContent(
           `Section Title: ${sectionTitle}`,
           "Use this section summary as the highest-priority context:",
           summary || "(empty)",
+          "",
+          "Final instruction: generate only this section/chapter, not the full product video.",
         ].join("\n"),
       },
       { type: "text", text: `Story Prompt\n${storyPrompt}` },
@@ -149,8 +164,18 @@ export async function buildSectionTaskContent(
   };
 }
 
-export async function createVideoTask(content: VideoTaskContent[]): Promise<string> {
-  const created = await postJson<VideoTaskCreateResponse>("/api/video/tasks", { content }, "Failed to create video task");
+export async function createVideoTask(content: VideoTaskContent[], durationSec: number): Promise<string> {
+  const created = await postJson<VideoTaskCreateResponse>(
+    "/api/video/tasks",
+    {
+      content,
+      ratio: "16:9",
+      resolution: "720p",
+      duration: Math.min(Math.max(durationSec, 5), 30),
+      generate_audio: true,
+    },
+    "Failed to create video task",
+  );
   const taskId = created.data?.task_id || created.task_id || created.data?.id || created.id;
   if (typeof taskId !== "string" || !taskId) {
     throw new Error("No task_id returned");

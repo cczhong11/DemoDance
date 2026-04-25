@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/recordings
 
 # next.js
 /.next/

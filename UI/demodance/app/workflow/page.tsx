@@ -14,6 +14,7 @@ import {
   buildChatPrompt,
   buildLogoPrompt,
   buildSuggestPrompt,
+  callJsonTextChat,
   callTextChat,
   fieldCounter,
   readSuggestUpdates,
@@ -73,7 +74,7 @@ export default function WorkflowPage() {
 
     try {
       const prompt = buildSuggestPrompt(locale, activeStep, getStepScript(activeStep.id));
-      const text = await callTextChat(prompt);
+      const text = await callJsonTextChat(prompt);
       const { fields, script } = readSuggestUpdates(activeStep, text);
       fillStepFields(activeStep.id, fields);
       if (script) setStepScript(activeStep.id, script);

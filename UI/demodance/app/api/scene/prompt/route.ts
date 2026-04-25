@@ -11,6 +11,10 @@ export async function POST(request: Request) {
   try {
     const parts = await loadScenePromptParts();
     const prompt = composeScenePrompt(parts, {
+      language: data.language === "zh" ? "zh" : "en",
+      sectionId: typeof data.sectionId === "string" ? data.sectionId : undefined,
+      sectionTitle: typeof data.sectionTitle === "string" ? data.sectionTitle : undefined,
+      sectionSummary: typeof data.sectionSummary === "string" ? data.sectionSummary : undefined,
       targetUser: typeof data.targetUser === "string" ? data.targetUser : "",
       problem: typeof data.problem === "string" ? data.problem : "",
       evidence: typeof data.evidence === "string" ? data.evidence : "",

@@ -12,6 +12,10 @@ export async function POST(request: Request) {
     const parts = await loadVoicePromptParts();
     const prompt = composeVoicePrompt(parts, {
       includeTechnicalArchitecture: Boolean(data.includeTechnicalArchitecture),
+      language: data.language === "zh" ? "zh" : "en",
+      sectionId: typeof data.sectionId === "string" ? data.sectionId : undefined,
+      sectionTitle: typeof data.sectionTitle === "string" ? data.sectionTitle : undefined,
+      sectionSummary: typeof data.sectionSummary === "string" ? data.sectionSummary : undefined,
       targetUser: typeof data.targetUser === "string" ? data.targetUser : "",
       problem: typeof data.problem === "string" ? data.problem : "",
       evidence: typeof data.evidence === "string" ? data.evidence : "",
@@ -36,4 +40,3 @@ export async function POST(request: Request) {
     return jsonError("Failed to compose voice prompt", 500, details);
   }
 }
-

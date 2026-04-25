@@ -10,7 +10,7 @@ import { LanguageToggle } from "../_components/language-toggle";
 import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
 import { useWorkflowStore } from "../_state/workflow-store";
-import { parseSubmission, wordCount } from "./_lib/onboarding-ai";
+import { analyzeDemoVideo, parseSubmission, wordCount } from "./_lib/onboarding-ai";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -27,6 +27,7 @@ export default function OnboardingPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [demoVideoFile, setDemoVideoFile] = useState<File | null>(null);
 
   const currentWordCount = useMemo(() => wordCount(submission), [submission]);
 
@@ -42,11 +43,22 @@ export default function OnboardingPage() {
     setError(null);
 
     try {
-      const parsed = await parseSubmission(input);
+      const [parsed, videoAnalysis] = await Promise.all([
+        parseSubmission(input),
+        demoVideoFile ? analyzeDemoVideo(demoVideoFile).catch(() => null) : Promise.resolve(null),
+      ]);
+      const videoFeatures = videoAnalysis?.features ?? [];
+      const evidenceNote = videoAnalysis
+        ? tr(
+            `Raw demo analysis detected ${videoFeatures.length || videoAnalysis.segments.length} usable product moment(s).`,
+            `原始 demo 分析识别到 ${videoFeatures.length || videoAnalysis.segments.length} 个可用产品片段。`,
+          )
+        : "";
 
       fillStepFields("audience", { user: parsed.audienceUser, problem: parsed.audienceProblem });
       fillStepFields("importance", {
         evidence:
+          evidenceNote ||
           parsed.importanceEvidence ||
           tr("Demand is rising and teams need clearer launch storytelling.", "需求在增长，团队需要更清晰的发布叙事。"),
       });
@@ -55,9 +67,9 @@ export default function OnboardingPage() {
         slogan: parsed.productSlogan || tr("From raw demo to launch-ready.", "从原始 demo 到可发布成片。"),
       });
       fillStepFields("features", {
-        feature1: parsed.feature1,
-        feature2: parsed.feature2,
-        feature3: parsed.feature3,
+        feature1: videoFeatures[0] || parsed.feature1,
+        feature2: videoFeatures[1] || parsed.feature2,
+        feature3: videoFeatures[2] || parsed.feature3,
       });
       fillStepFields("tech", { stack: parsed.techStack || "Next.js · OpenAI · FFmpeg" });
       fillStepFields("impact", {
@@ -70,7 +82,12 @@ export default function OnboardingPage() {
         {
           role: "ai",
           tag: tr("Submission Parsed", "已解析提交内容"),
-          text: tr("I prefilled steps 2-6. Review and refine in workflow.", "我已预填第 2-6 步，你可以在工作台继续细化。"),
+          text: videoAnalysis
+            ? tr(
+                "I parsed the submission and analyzed the raw demo video, then prefilled the workflow.",
+                "我已解析提交文本并分析原始 demo 视频，然后预填了工作流。",
+              )
+            : tr("I prefilled steps 2-6. Review and refine in workflow.", "我已预填第 2-6 步，你可以在工作台继续细化。"),
         },
       ]);
 
@@ -140,6 +157,7 @@ export default function OnboardingPage() {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
+                      setDemoVideoFile(file);
                       setDemoVideo({ name: file.name, size: file.size, url: URL.createObjectURL(file) });
                     }}
                   />

@@ -83,14 +83,14 @@ export function getInitialSteps(locale: LocaleCode): Step[] {
     {
       id: "importance",
       index: 2,
-      title: isEn ? "Problem Importance (Web Evidence)" : "问题的重要性（联网佐证）",
-      subtitle: isEn ? "AI gathers online signals to validate the problem" : "AI 会抓取网络数据支撑这个 problem",
+      title: isEn ? "Problem Importance" : "问题的重要性",
+      subtitle: isEn ? "Summarize why this problem matters using the submission and demo context" : "结合提交文本和 demo 语境说明这个问题为什么重要",
       fields: [
         {
           key: "evidence",
-          label: "Web Evidence",
+          label: "Evidence Angle",
           value: "",
-          placeholder: isEn ? "Ask AI on the right to search evidence..." : "点右侧 AI「去网上找证据」…",
+          placeholder: isEn ? "Summarize the signal, urgency, or demo proof..." : "总结需求信号、紧迫性或 demo 证明…",
         },
       ],
     },

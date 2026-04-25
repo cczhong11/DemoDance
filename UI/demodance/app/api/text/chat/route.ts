@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getIonRouterConfig, resolveIonRouterBaseUrlByModel } from "@/lib/server/config";
+import { getOpenAIConfig } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -9,6 +9,10 @@ type ChatMessage = {
   role: string;
   content: string;
 };
+
+function readMode(value: unknown): "chat" | "json" {
+  return value === "json" ? "json" : "chat";
+}
 
 function extractAssistantText(payload: unknown): string {
   const root = payload as {
@@ -38,14 +42,14 @@ function extractAssistantText(payload: unknown): string {
 
 export async function POST(request: Request) {
   const data = await readJsonBody(request);
-  const config = getIonRouterConfig();
+  const config = getOpenAIConfig();
 
   if (!config.apiKey) {
-    return jsonError("IONROUTER_API_KEY is not set", 500);
+    return jsonError("OPENAI_API_KEY is not set", 500);
   }
 
   const model = (data.model as string | undefined) ?? config.defaultTextModel;
-  const baseUrl = resolveIonRouterBaseUrlByModel(model, config.baseUrl);
+  const mode = readMode(data.mode);
   const prompt = typeof data.prompt === "string" ? data.prompt : undefined;
   const messages = Array.isArray(data.messages) ? (data.messages as ChatMessage[]) : undefined;
 
@@ -57,16 +61,23 @@ export async function POST(request: Request) {
     payloadMessages = [{ role: "user", content: prompt }];
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     model,
     messages: payloadMessages,
-    temperature: typeof data.temperature === "number" ? data.temperature : 0.7,
-    max_tokens: Math.max(typeof data.max_tokens === "number" ? data.max_tokens : 5000, 5000),
+    max_completion_tokens: typeof data.max_completion_tokens === "number"
+      ? data.max_completion_tokens
+      : typeof data.max_tokens === "number"
+        ? data.max_tokens
+        : 5000,
   };
+  if (typeof data.temperature === "number") payload.temperature = data.temperature;
+  else if (mode === "json") payload.temperature = 0.2;
+  if (typeof data.reasoning_effort === "string") payload.reasoning_effort = data.reasoning_effort;
+  if (mode === "json") payload.response_format = { type: "json_object" };
 
   try {
     const requestOnce = async (body: Record<string, unknown>) => {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
@@ -86,7 +97,7 @@ export async function POST(request: Request) {
 
     const first = await requestOnce(payload as Record<string, unknown>);
     if (!first.ok) {
-      return jsonError("IonRouter text API request failed", first.status, first.details);
+      return jsonError("OpenAI text API request failed", first.status, first.details);
     }
 
     const firstText = extractAssistantText(first.result).trim();
@@ -94,21 +105,20 @@ export async function POST(request: Request) {
       return NextResponse.json(first.result);
     }
 
-    const retryPayload = {
+    const retryPayload: Record<string, unknown> = {
       ...payload,
-      temperature: 0.2,
-      max_tokens: Math.max(payload.max_tokens, 5000),
+      max_completion_tokens: Math.max(Number(payload.max_completion_tokens), 5000),
       messages: [
         ...payloadMessages,
         {
           role: "user",
-          content: "Return only the final answer now. Output strict JSON only.",
+          content: mode === "json" ? "Return only the final answer now. Output strict JSON only." : "Return only the final answer now.",
         },
       ],
     };
     const second = await requestOnce(retryPayload as Record<string, unknown>);
     if (!second.ok) {
-      return jsonError("IonRouter text API request failed", second.status, second.details);
+      return jsonError("OpenAI text API request failed", second.status, second.details);
     }
 
     const secondText = extractAssistantText(second.result).trim();
@@ -116,9 +126,9 @@ export async function POST(request: Request) {
       return NextResponse.json(second.result);
     }
 
-    return jsonError("IonRouter returned empty assistant content", 502, second.result);
+    return jsonError("OpenAI returned empty assistant content", 502, second.result);
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
-    return jsonError("IonRouter text API unavailable", 502, details);
+    return jsonError("OpenAI text API unavailable", 502, details);
   }
 }
