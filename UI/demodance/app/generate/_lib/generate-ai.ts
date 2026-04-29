@@ -209,12 +209,6 @@ export async function buildSectionTaskContent(
 ): Promise<{ prompt: string; summary: string; content: VideoTaskContent[] }> {
   const summary = summarizeStep(steps, getStepScript, sectionId);
   const sectionTitle = steps.find((item) => item.id === sectionId)?.title ?? sectionId;
-  const payload = buildPromptContext(steps, getStepScript, projectName, language, sectionId, sectionTitle, summary);
-  const [storyPrompt, scenePrompt, voicePrompt] = await Promise.all([
-    callPromptComposer("/api/story/prompt", payload),
-    callPromptComposer("/api/scene/prompt", payload),
-    callPromptComposer("/api/voice/prompt", payload),
-  ]);
 
   const referenceImages: VideoTaskContent[] = storyboardFrames
     .filter((frame) => typeof frame === "string" && frame.trim())
@@ -260,7 +254,6 @@ export async function buildSectionTaskContent(
       ...(referenceNotes.length > 0 ? [""] : []),
       "Final instruction: generate only this section/chapter, not the full product video.",
     ].join("\n"),
-    
   ];
 
   return {
@@ -304,6 +297,10 @@ export async function generateStoryboardFrames(
     "The four panels inside that single image should stay within this single chapter and show: chapter opening, primary action, supporting proof/detail, chapter close.",
     "Keep the panel spacing and composition clear so it reads as one storyboard board.",
     ...productImageGuidance,
+    "Text inside the storyboard image should be as minimal as possible.",
+    "Prefer zero text in the image. If text is absolutely necessary, use only very short labels of 1 to 3 words.",
+    "Do not include paragraphs, captions, subtitles, dialog bubbles, dense UI copy, bullet lists, or explanatory annotations in the storyboard image.",
+    "Keep UI screens visually simple and largely text-free so the storyboard can be turned into video more easily.",
     "Avoid text-heavy layouts, logos, watermarks, subtitles, and UI text that would be unreadable at small size.",
     "",
     "Chapter summary:",
