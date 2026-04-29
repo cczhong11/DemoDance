@@ -19,6 +19,7 @@ type SectionRender = {
   status: "idle" | "generating" | "done";
   durationSec: number;
   version: number;
+  prompt?: string;
   storyboardFrames?: string[];
   storyboardPrompt?: string;
   taskId?: string;

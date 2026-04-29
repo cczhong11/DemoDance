@@ -137,6 +137,25 @@ function buildAllSectionsContext(
     .filter(Boolean);
 }
 
+function buildStoryboardProductImageGuidance(steps: Step[], sectionId: StepId): string[] {
+  const productName = getStepField(steps, "product", "name") || "the product";
+  const slogan = getStepField(steps, "product", "slogan");
+  const productLabel = slogan ? `${productName} (${slogan})` : productName;
+
+  if (sectionId === "features") {
+    return [
+      `Branded product-image rule: this is Stage 4, the only storyboard allowed to visibly depict ${productLabel} as a branded product.`,
+      "In this stage, it is okay to show the product hero screen, branded device/app surfaces, or a recognizable product visual if helpful to explain the features.",
+    ];
+  }
+
+  return [
+    "Branded product-image rule: do not show the product image in this storyboard.",
+    `This is not Stage 4, so avoid hero shots of ${productLabel}, avoid splash screens, avoid prominent branded UI/product shots, and avoid any logo-centric composition.`,
+    "Keep the visuals focused on the user problem, stakes, workflow context, or future outcome instead of the branded product reveal.",
+  ];
+}
+
 function buildPromptContext(
   steps: Step[],
   getStepScript: (stepId: StepId) => string,
@@ -187,7 +206,7 @@ export async function buildSectionTaskContent(
   sectionId: StepId,
   language: LocaleCode,
   storyboardFrames: string[] = [],
-): Promise<{ summary: string; content: VideoTaskContent[] }> {
+): Promise<{ prompt: string; summary: string; content: VideoTaskContent[] }> {
   const summary = summarizeStep(steps, getStepScript, sectionId);
   const sectionTitle = steps.find((item) => item.id === sectionId)?.title ?? sectionId;
   const payload = buildPromptContext(steps, getStepScript, projectName, language, sectionId, sectionTitle, summary);
@@ -229,26 +248,29 @@ export async function buildSectionTaskContent(
     }
   }
 
+  const textBlocks = [
+    [
+      "Section production brief:",
+      `Section ID: ${sectionId}`,
+      `Section Title: ${sectionTitle}`,
+      "Use this section summary as the highest-priority context:",
+      summary || "(empty)",
+      "",
+      ...referenceNotes,
+      ...(referenceNotes.length > 0 ? [""] : []),
+      "Final instruction: generate only this section/chapter, not the full product video.",
+    ].join("\n"),
+    
+  ];
+
   return {
+    prompt: textBlocks.join("\n\n"),
     summary,
     content: [
-      {
-        type: "text",
-        text: [
-          "Section production brief:",
-          `Section ID: ${sectionId}`,
-          `Section Title: ${sectionTitle}`,
-          "Use this section summary as the highest-priority context:",
-          summary || "(empty)",
-          "",
-          ...referenceNotes,
-          ...(referenceNotes.length > 0 ? [""] : []),
-          "Final instruction: generate only this section/chapter, not the full product video.",
-        ].join("\n"),
-      },
-      { type: "text", text: `Story Prompt\n${storyPrompt}` },
-      { type: "text", text: `Scene Prompt\n${scenePrompt}` },
-      { type: "text", text: `Voice Prompt\n${voicePrompt}` },
+      ...textBlocks.map((text) => ({
+        type: "text" as const,
+        text,
+      })),
       ...referenceImages,
     ],
   };
@@ -266,6 +288,7 @@ export async function generateStoryboardFrames(
   const payload = buildPromptContext(steps, getStepScript, projectName, language, sectionId, sectionTitle, summary);
   const scenePrompt = await callPromptComposer("/api/scene/prompt", payload);
   const allSectionsContext = buildAllSectionsContext(steps, getStepScript, sectionId);
+  const productImageGuidance = buildStoryboardProductImageGuidance(steps, sectionId);
   const prompt = [
     "Create one single 2x2 storyboard board for exactly one chapter of a hackathon product demo video.",
     `Project: ${(projectName || "DemoDance").trim()}`,
@@ -280,6 +303,7 @@ export async function generateStoryboardFrames(
     "Output exactly one image containing a clean 2x2 storyboard layout.",
     "The four panels inside that single image should stay within this single chapter and show: chapter opening, primary action, supporting proof/detail, chapter close.",
     "Keep the panel spacing and composition clear so it reads as one storyboard board.",
+    ...productImageGuidance,
     "Avoid text-heavy layouts, logos, watermarks, subtitles, and UI text that would be unreadable at small size.",
     "",
     "Chapter summary:",

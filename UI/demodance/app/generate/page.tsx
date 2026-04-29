@@ -79,6 +79,49 @@ export default function GeneratePage() {
     return `${blocks.join("\n\n")}\n`;
   }
 
+  function base64ToObjectUrl(base64: string, mimeType: string) {
+    const binary = window.atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  }
+
+  async function copyPrompt(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setAssistantNotes((prev) => [...prev, locale === "zh" ? `• 已复制 ${label} prompt。` : `• Copied ${label} prompt.`]);
+    } catch (error) {
+      setAssistantNotes((prev) => [
+        ...prev,
+        `${locale === "zh" ? "• Prompt 复制失败：" : "• Prompt copy failed: "}${error instanceof Error ? error.message : String(error)}`,
+      ]);
+    }
+  }
+
+  async function copyVideoPrompt(sectionId: StepId) {
+    const section = renderSections.find((item) => item.id === sectionId);
+    if (!section) return;
+
+    if (section.prompt) {
+      await copyPrompt(section.prompt, section.title);
+      return;
+    }
+
+    try {
+      const storyboardFrames = section.storyboardFrames ?? [];
+      const { prompt } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId, locale, storyboardFrames);
+      setRenderSections((prev) => prev.map((item) => (item.id === sectionId ? { ...item, prompt } : item)));
+      await copyPrompt(prompt, section.title);
+    } catch (error) {
+      setAssistantNotes((prev) => [
+        ...prev,
+        `${locale === "zh" ? "• 生成视频 prompt 失败：" : "• Failed to build video prompt: "}${error instanceof Error ? error.message : String(error)}`,
+      ]);
+    }
+  }
+
   async function generateStoryboardSection(sectionId: StepId) {
     const sectionSummary = summarizeStep(steps, getStepScript, sectionId);
     setRenderSections((prev) =>
@@ -130,11 +173,11 @@ export default function GeneratePage() {
 
     try {
       const storyboardFrames = renderSections.find((item) => item.id === sectionId)?.storyboardFrames ?? [];
-      const { content } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId, locale, storyboardFrames);
+      const { content, prompt } = await buildSectionTaskContent(steps, getStepScript, projectName, sectionId, locale, storyboardFrames);
       const durationSec = renderSections.find((item) => item.id === sectionId)?.durationSec ?? 15;
       const taskId = await createVideoTask(content, durationSec);
 
-      setRenderSections((prev) => prev.map((item) => (item.id === sectionId ? { ...item, taskId } : item)));
+      setRenderSections((prev) => prev.map((item) => (item.id === sectionId ? { ...item, taskId, prompt } : item)));
 
       while (true) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -265,7 +308,8 @@ export default function GeneratePage() {
         throw new Error(typeof data.error === "string" ? data.error : "Failed to generate voiceover");
       }
 
-      const audioUrl = `data:${data.mime_type ?? "audio/wav"};base64,${data.audio_base64}`;
+      if (voiceoverSrc) URL.revokeObjectURL(voiceoverSrc);
+      const audioUrl = base64ToObjectUrl(data.audio_base64, data.mime_type ?? "audio/wav");
       setVoiceoverSrc(audioUrl);
 
       if (srtUrl) URL.revokeObjectURL(srtUrl);
@@ -457,6 +501,15 @@ export default function GeneratePage() {
                           <button type="button" className="dd-icon-btn" onClick={() => void manualRefresh(section.id)} aria-label="Refresh">
                             <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>
                           </button>
+                          <button
+                            type="button"
+                            className="dd-icon-btn"
+                            onClick={() => void copyVideoPrompt(section.id)}
+                            aria-label="Copy prompt"
+                            title="Copy prompt"
+                          >
+                            <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z"/></svg>
+                          </button>
                           {section.videoUrl ? (
                             <a href={section.videoUrl} target="_blank" rel="noreferrer" className="dd-icon-btn" aria-label="Preview">
                               <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5M12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5m0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3"/></svg>
@@ -540,6 +593,15 @@ export default function GeneratePage() {
                   {voiceoverGenerating ? "Generating Voiceover..." : "Generate Voiceover + SRT"}
                 </button>
                 {voiceoverSrc ? <audio controls src={voiceoverSrc} className="h-10" /> : null}
+                {voiceoverSrc ? (
+                  <a
+                    href={voiceoverSrc}
+                    download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_") || "DemoDance"}.wav`}
+                    className="dd-btn-secondary h-10 px-4"
+                  >
+                    Download WAV
+                  </a>
+                ) : null}
                 {srtUrl ? (
                   <a href={srtUrl} download={`${(projectName || "DemoDance").trim().replace(/\s+/g, "_")}.srt`} className="dd-btn-secondary h-10 px-4">
                     Download SRT
