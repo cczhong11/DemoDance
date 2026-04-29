@@ -198,7 +198,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return new Response(outputAudioBuffer, {
+    return new Response(new Uint8Array(outputAudioBuffer), {
       status: 200,
       headers: {
         "Content-Disposition": 'attachment; filename="voiceover.wav"',
