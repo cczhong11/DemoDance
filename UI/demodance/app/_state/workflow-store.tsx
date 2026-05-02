@@ -29,7 +29,35 @@ type SectionRender = {
   rawResponse?: unknown;
 };
 
+type SyncPayload = {
+  projectId: string | null;
+  projectName: string;
+  submission: string;
+  demoVideo: {
+    name: string;
+    size: number;
+  } | null;
+  activeStepId: StepId;
+  fieldValues: Record<string, string>;
+  stepScripts: Record<StepId, string>;
+  chat: ChatMsg[];
+  renderSections: Array<{
+    id: StepId;
+    title: string;
+    summary: string;
+    status: "idle" | "generating" | "done";
+    durationSec: number;
+    version: number;
+    storyboardFrames?: string[];
+    taskId?: string;
+    apiState?: string;
+    progress?: number;
+    videoUrl?: string;
+  }>;
+};
+
 type StoreState = {
+  projectId: string | null;
   projectName: string;
   submission: string;
   demoVideo: DemoVideoMeta | null;
@@ -41,6 +69,7 @@ type StoreState = {
 };
 
 type WorkflowStoreValue = {
+  projectId: string | null;
   projectName: string;
   setProjectName: (value: string) => void;
   submission: string;
@@ -60,6 +89,8 @@ type WorkflowStoreValue = {
   setChat: (next: ChatMsg[] | ((prev: ChatMsg[]) => ChatMsg[])) => void;
   renderSections: SectionRender[];
   setRenderSections: (next: SectionRender[] | ((prev: SectionRender[]) => SectionRender[])) => void;
+  saveProject: () => Promise<boolean>;
+  saveState: "idle" | "saving" | "saved" | "error";
   resetAll: () => void;
 };
 
@@ -82,18 +113,40 @@ function getFieldStorageKey(stepId: string, fieldKey: string): string {
   return `${stepId}.${fieldKey}`;
 }
 
+function normalizeDurationSec(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.round(parsed), 4), 15);
+}
+
 function getDefaultRenderSections(): SectionRender[] {
   return [
-    { id: "audience", title: "Target User & Problem", summary: "", status: "idle", durationSec: 15, version: 0 },
-    { id: "importance", title: "Why It Matters", summary: "", status: "idle", durationSec: 15, version: 0 },
-    { id: "product", title: "Product Intro", summary: "", status: "idle", durationSec: 20, version: 0 },
-    { id: "features", title: "Features", summary: "", status: "idle", durationSec: 30, version: 0 },
-    { id: "impact", title: "Future Impact", summary: "", status: "idle", durationSec: 20, version: 0 },
+    { id: "audience", title: "Target User & Problem", summary: "", status: "idle", durationSec: 12, version: 0 },
+    { id: "importance", title: "Why It Matters", summary: "", status: "idle", durationSec: 12, version: 0 },
+    { id: "product", title: "Product Intro", summary: "", status: "idle", durationSec: 15, version: 0 },
+    { id: "features", title: "Features", summary: "", status: "idle", durationSec: 15, version: 0 },
+    { id: "impact", title: "Future Impact", summary: "", status: "idle", durationSec: 12, version: 0 },
   ];
+}
+
+function normalizeRenderSections(sections: SectionRender[]): SectionRender[] {
+  const defaults = getDefaultRenderSections();
+  const defaultMap = new Map(defaults.map((section) => [section.id, section]));
+
+  return sections.map((section) => {
+    const fallback = defaultMap.get(section.id)?.durationSec ?? 12;
+    return {
+      ...section,
+      durationSec: normalizeDurationSec(section.durationSec, fallback),
+    };
+  });
 }
 
 function buildDefaultState(locale: "en" | "zh" = "en"): StoreState {
   return {
+    projectId: null,
     projectName: "",
     submission: "",
     demoVideo: null,
@@ -118,6 +171,7 @@ function loadStoredState(): StoreState {
 
     const parsed = JSON.parse(raw) as Partial<StoreState>;
     return {
+      projectId: typeof parsed.projectId === "string" && parsed.projectId.trim().length > 0 ? parsed.projectId : null,
       projectName: typeof parsed.projectName === "string" ? parsed.projectName : "",
       submission: typeof parsed.submission === "string" ? parsed.submission : "",
       demoVideo: parsed.demoVideo && typeof parsed.demoVideo === "object" ? (parsed.demoVideo as DemoVideoMeta) : null,
@@ -156,9 +210,10 @@ function loadStoredState(): StoreState {
             }
           : DEFAULT_STEP_SCRIPTS,
       chat: Array.isArray(parsed.chat) && parsed.chat.length > 0 ? (parsed.chat as ChatMsg[]) : getInitialChat("en"),
-      renderSections: Array.isArray(parsed.renderSections) && parsed.renderSections.length > 0
-        ? (parsed.renderSections as SectionRender[])
-        : getDefaultRenderSections(),
+      renderSections:
+        Array.isArray(parsed.renderSections) && parsed.renderSections.length > 0
+          ? normalizeRenderSections(parsed.renderSections as SectionRender[])
+          : getDefaultRenderSections(),
     };
   } catch {
     return buildDefaultState("en");
@@ -182,17 +237,173 @@ function persistState(next: StoreState) {
   }
 }
 
+function trimText(value: string, limit: number) {
+  const normalized = value.trim();
+  return normalized.length > limit ? normalized.slice(0, limit) : normalized;
+}
+
+function sanitizeFieldValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("data:")) {
+    return "[inline asset omitted from autosave]";
+  }
+  return trimmed.length > 4000 ? trimmed.slice(0, 4000) : trimmed;
+}
+
+function buildSyncPayload(snapshot: StoreState): SyncPayload {
+  const fieldValues = Object.fromEntries(
+    Object.entries(snapshot.fieldValues).map(([key, value]) => [key, sanitizeFieldValue(value)]),
+  );
+
+  const stepScripts = {
+    audience: trimText(snapshot.stepScripts.audience ?? "", 4000),
+    importance: trimText(snapshot.stepScripts.importance ?? "", 4000),
+    product: trimText(snapshot.stepScripts.product ?? "", 4000),
+    features: trimText(snapshot.stepScripts.features ?? "", 4000),
+    tech: trimText(snapshot.stepScripts.tech ?? "", 4000),
+    impact: trimText(snapshot.stepScripts.impact ?? "", 4000),
+  } satisfies Record<StepId, string>;
+
+  const chat = snapshot.chat.slice(-12).map((message) => ({
+    ...message,
+    text: typeof message.text === "string" ? trimText(message.text, 1500) : "",
+    tag: typeof message.tag === "string" ? trimText(message.tag, 120) : undefined,
+  }));
+
+  const renderSections = snapshot.renderSections.map((section) => ({
+    id: section.id,
+    title: trimText(section.title, 120),
+    summary: trimText(section.summary, 2000),
+    status: section.status,
+    durationSec: section.durationSec,
+    version: section.version,
+    storyboardFrames: Array.isArray(section.storyboardFrames)
+      ? section.storyboardFrames
+          .filter((frame): frame is string => typeof frame === "string" && frame.length > 0 && !frame.startsWith("data:"))
+          .slice(0, 4)
+          .map((frame) => trimText(frame, 2000))
+      : undefined,
+    taskId: typeof section.taskId === "string" ? trimText(section.taskId, 200) : undefined,
+    apiState: typeof section.apiState === "string" ? trimText(section.apiState, 120) : undefined,
+    progress: typeof section.progress === "number" ? section.progress : undefined,
+    videoUrl:
+      typeof section.videoUrl === "string" && !section.videoUrl.startsWith("data:")
+        ? trimText(section.videoUrl, 2000)
+        : undefined,
+  }));
+
+  return {
+    projectId: snapshot.projectId,
+    projectName: trimText(snapshot.projectName, 200),
+    submission: trimText(snapshot.submission, 8000),
+    demoVideo: snapshot.demoVideo
+      ? {
+          name: trimText(snapshot.demoVideo.name, 300),
+          size: snapshot.demoVideo.size,
+        }
+      : null,
+    activeStepId: snapshot.activeStepId,
+    fieldValues,
+    stepScripts,
+    chat,
+    renderSections,
+  };
+}
+
+function hasSavableProgress(state: StoreState) {
+  if (state.projectName.trim().length > 0) return true;
+  if (state.submission.trim().length > 0) return true;
+  if (state.demoVideo) return true;
+  if (Object.values(state.fieldValues).some((value) => value.trim().length > 0)) return true;
+  if (Object.values(state.stepScripts).some((value) => value.trim().length > 0)) return true;
+  if (state.chat.length > 1) return true;
+  if (state.renderSections.some((section) => section.summary.trim().length > 0 || (section.prompt ?? "").trim().length > 0 || section.taskId || section.videoUrl)) {
+    return true;
+  }
+  return false;
+}
+
 const WorkflowStoreContext = createContext<WorkflowStoreValue | null>(null);
 
 export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StoreState>(() => loadInitialState());
+  const [hasHydrated, setHasHydrated] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const { locale } = useLocale();
 
   useEffect(() => {
     startTransition(() => {
       setState(loadStoredState());
     });
+    setHasHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (!hasSavableProgress(state)) return;
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        await saveProjectState(state, false);
+      } catch {
+        // keep local editing uninterrupted if autosave fails
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [hasHydrated, state]);
+
+  async function saveProjectState(snapshot: StoreState, showStatus = true): Promise<boolean> {
+    if (!hasSavableProgress(snapshot)) {
+      return false;
+    }
+
+    if (showStatus) {
+      setSaveState("saving");
+    }
+
+    try {
+      const payload = buildSyncPayload(snapshot);
+      const response = await fetch("/api/projects/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        if (showStatus) {
+          setSaveState("error");
+        }
+        return false;
+      }
+
+      const result = (await response.json()) as { projectId?: string };
+      const syncedProjectId = typeof result.projectId === "string" && result.projectId ? result.projectId : null;
+      if (syncedProjectId && syncedProjectId !== snapshot.projectId) {
+        setState((prev) => {
+          if (prev.projectId === syncedProjectId) {
+            return prev;
+          }
+          const next = { ...prev, projectId: syncedProjectId };
+          persistState(next);
+          return next;
+        });
+      }
+
+      if (showStatus) {
+        setSaveState("saved");
+      }
+      return true;
+    } catch {
+      if (showStatus) {
+        setSaveState("error");
+      }
+      return false;
+    }
+  }
 
   const steps = useMemo(() => {
     const templates = getInitialSteps(locale);
@@ -234,6 +445,7 @@ export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WorkflowStoreValue>(
     () => ({
+      projectId: state.projectId,
       projectName: state.projectName,
       setProjectName: (projectName) => setStateAndPersist((prev) => ({ ...prev, projectName })),
       submission: state.submission,
@@ -285,8 +497,11 @@ export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
           ...prev,
           renderSections: typeof next === "function" ? next(prev.renderSections) : next,
         })),
+      saveProject: () => saveProjectState(state, true),
+      saveState,
       resetAll: () =>
         setStateAndPersist(() => ({
+          projectId: null,
           projectName: "",
           submission: "",
           demoVideo: null,
@@ -297,7 +512,7 @@ export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
           renderSections: getDefaultRenderSections(),
         })),
     }),
-    [state, steps, overallFilled, allDone, locale],
+    [state, steps, overallFilled, allDone, locale, saveState],
   );
 
   return <WorkflowStoreContext.Provider value={value}>{children}</WorkflowStoreContext.Provider>;

@@ -232,6 +232,9 @@ export async function buildSectionTaskContent(
     const storyboardCount = storyboardFrames.filter(Boolean).length;
     if (storyboardCount > 0) {
       referenceNotes.push(
+        "Safety note for storyboard references: if any people appear in these reference images, they are AI-generated synthetic people created for visual guidance, not real persons.",
+      );
+      referenceNotes.push(
         `Use [Image 1]${storyboardCount > 1 ? ` through [Image ${storyboardCount}]` : ""} as storyboard reference images for shot composition, pacing, and visual continuity.`,
       );
     }
@@ -293,6 +296,8 @@ export async function generateStoryboardFrames(
     ...(allSectionsContext.length > 0 ? allSectionsContext : []),
     ...(allSectionsContext.length > 0 ? [""] : []),
     "Visual format: 16:9 cinematic storyboard frame, clean product-demo composition, readable UI surfaces, consistent lighting, polished but not poster-like.",
+    "Visual style: luminous cinematic anime background art with emotional atmosphere, expansive skies, glowing clouds, soft sunlight bloom, subtle rim light, rich blue-and-gold color contrast, crisp environmental detail, and a wistful modern-city mood.",
+    "Aim for a premium animated-film look with delicate depth, reflective light, gentle gradients, and beautifully staged weather and sky conditions.",
     "Output exactly one image containing a clean 2x2 storyboard layout.",
     "The four panels inside that single image should stay within this single chapter and show: chapter opening, primary action, supporting proof/detail, chapter close.",
     "Keep the panel spacing and composition clear so it reads as one storyboard board.",
@@ -349,7 +354,7 @@ export async function createVideoTask(content: VideoTaskContent[], durationSec: 
       content,
       ratio: "16:9",
       resolution: "720p",
-      duration: Math.min(Math.max(durationSec, 5), 30),
+      duration: Math.min(Math.max(Math.round(durationSec), 4), 15),
       generate_audio: true,
     },
     "Failed to create video task",

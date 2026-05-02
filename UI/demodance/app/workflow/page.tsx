@@ -39,6 +39,8 @@ export default function WorkflowPage() {
     setStepScript,
     chat,
     setChat,
+    saveProject,
+    saveState,
   } = useWorkflowStore();
 
   const [chatInput, setChatInput] = useState("");
@@ -47,6 +49,7 @@ export default function WorkflowPage() {
   const [aiSuggestLoading, setAiSuggestLoading] = useState(false);
   const [scriptGenerating, setScriptGenerating] = useState(false);
   const [logoGenerating, setLogoGenerating] = useState(false);
+  const [manualSaveBusy, setManualSaveBusy] = useState(false);
 
   const activeStep = steps.find((step) => step.id === activeStepId) ?? steps[0];
   const activeIndex = workflowStepOrder.indexOf(activeStep.id);
@@ -202,6 +205,16 @@ export default function WorkflowPage() {
 
   function quickAction(action: string) {
     void sendMessage(`${action} this section in a concise way.`);
+  }
+
+  async function handleManualSave() {
+    if (manualSaveBusy) return;
+    setManualSaveBusy(true);
+    try {
+      await saveProject();
+    } finally {
+      setManualSaveBusy(false);
+    }
   }
 
   return (
@@ -496,15 +509,36 @@ export default function WorkflowPage() {
                 }}
               />
               <div className="mt-2 flex items-center justify-between">
-                <div className="text-sm text-[var(--dd-text-muted)]">Enter to send · Shift+Enter for new line</div>
-                <button
-                  type="button"
-                  className={`dd-btn-primary h-10 px-4 ${chatLoading || !chatInput.trim() ? "opacity-60 cursor-not-allowed" : ""}`}
-                  onClick={() => void sendMessage()}
-                  disabled={chatLoading || !chatInput.trim()}
-                >
-                  Send
-                </button>
+                <div className="flex items-center gap-3 text-sm text-[var(--dd-text-muted)]">
+                  <span>Enter to send · Shift+Enter for new line</span>
+                  <span>
+                    {saveState === "saving" || manualSaveBusy
+                      ? tr("Saving...", "保存中...")
+                      : saveState === "saved"
+                        ? tr("Saved", "已保存")
+                        : saveState === "error"
+                          ? tr("Save failed", "保存失败")
+                          : tr("Autosave on", "已开启自动保存")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`dd-btn-secondary h-10 px-4 ${manualSaveBusy ? "opacity-60 cursor-not-allowed" : ""}`}
+                    onClick={() => void handleManualSave()}
+                    disabled={manualSaveBusy}
+                  >
+                    {manualSaveBusy ? tr("Saving...", "保存中...") : tr("Save Current Project", "保存当前项目")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`dd-btn-primary h-10 px-4 ${chatLoading || !chatInput.trim() ? "opacity-60 cursor-not-allowed" : ""}`}
+                    onClick={() => void sendMessage()}
+                    disabled={chatLoading || !chatInput.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
               </div>
               {chatError ? <div className="mt-2 text-sm text-[var(--dd-danger)]">{chatError}</div> : null}
             </>

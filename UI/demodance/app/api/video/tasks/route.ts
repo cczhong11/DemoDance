@@ -8,6 +8,25 @@ export const runtime = "nodejs";
 const ALLOWED_LIST_STATUSES = new Set(["queued", "running", "cancelled", "succeeded", "failed"]);
 const ALLOWED_SERVICE_TIERS = new Set(["default", "flex"]);
 
+function normalizeDurationForModel(model: string, value: unknown) {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return value;
+  }
+
+  const normalized = Math.round(parsed);
+
+  if (model.startsWith("dreamina-seedance-2-0")) {
+    return Math.min(Math.max(normalized, 4), 15);
+  }
+
+  return normalized;
+}
+
 function buildVideoTaskPayload(data: Record<string, unknown>, defaultModel: string) {
   const model = (data.model as string | undefined) ?? defaultModel;
   const prompt = typeof data.prompt === "string" ? data.prompt : undefined;
@@ -49,7 +68,7 @@ function buildVideoTaskPayload(data: Record<string, unknown>, defaultModel: stri
   for (const key of optionalKeys) {
     const value = data[key];
     if (value !== undefined && value !== null) {
-      payload[key] = value;
+      payload[key] = key === "duration" ? normalizeDurationForModel(model, value) : value;
     }
   }
 
