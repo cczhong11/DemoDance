@@ -27,6 +27,10 @@ type FrameInsight = {
   danger?: "low" | "medium" | "high";
 };
 
+const MAX_ANALYSIS_FRAMES = 20;
+const MAX_FRAME_WIDTH = 800;
+const MAX_FRAME_HEIGHT = 600;
+
 function coerceNumber(value: unknown, fallback: number) {
   const n = Number.parseFloat(String(value));
   return Number.isFinite(n) ? n : fallback;
@@ -70,6 +74,24 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
     out.push(arr.slice(i, i + size));
   }
   return out;
+}
+
+function sampleEvenly<T>(arr: T[], limit: number): T[] {
+  if (arr.length <= limit) return arr;
+
+  const out: T[] = [];
+  for (let i = 0; i < limit; i += 1) {
+    const idx = Math.floor((i * (arr.length - 1)) / Math.max(1, limit - 1));
+    out.push(arr[idx]);
+  }
+  return out;
+}
+
+function buildFrameFilter(fps: number) {
+  return [
+    `fps=${fps}`,
+    `scale=w=trunc(min(${MAX_FRAME_WIDTH}\\,iw)/2)*2:h=trunc(min(${MAX_FRAME_HEIGHT}\\,ih)/2)*2:force_original_aspect_ratio=decrease`,
+  ].join(",");
 }
 
 async function runCommand(cmd: string, args: string[]): Promise<void> {
@@ -291,9 +313,9 @@ export async function POST(request: Request) {
       "-i",
       inputPath,
       "-vf",
-      `fps=${parsed.fps}`,
+      buildFrameFilter(parsed.fps),
       "-q:v",
-      "2",
+      "4",
       path.join(framesDir, "frame_%06d.jpg"),
     ]);
 
@@ -303,7 +325,7 @@ export async function POST(request: Request) {
       return jsonError("No frames extracted from video", 400);
     }
 
-    const frames = await Promise.all(
+    const extractedFrames = await Promise.all(
       files.map(async (name, idx) => {
         const full = path.join(framesDir, name);
         const bytes = await fs.readFile(full);
@@ -313,6 +335,8 @@ export async function POST(request: Request) {
         };
       }),
     );
+
+    const frames = sampleEvenly(extractedFrames, MAX_ANALYSIS_FRAMES);
 
     const batches = chunkArray(frames, parsed.batchSize);
     const frameInsights: FrameInsight[] = [];
@@ -347,7 +371,8 @@ export async function POST(request: Request) {
       model: parsed.model,
       fps: parsed.fps,
       batch_size: parsed.batchSize,
-      total_frames: files.length,
+      total_frames: frames.length,
+      total_extracted_frames: files.length,
       total_batches: batches.length,
       prompt: parsed.prompt,
       frames: frameInsights,
