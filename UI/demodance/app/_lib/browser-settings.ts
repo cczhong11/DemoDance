@@ -1,4 +1,5 @@
 export const OPENAI_API_KEY_STORAGE_KEY = "demodance.openaiApiKey";
+export const GEMINI_API_KEY_STORAGE_KEY = "demodance.geminiApiKey";
 
 export function readBrowserOpenAIApiKey() {
   if (typeof window === "undefined") return "";
@@ -18,6 +19,29 @@ export function writeBrowserOpenAIApiKey(value: string) {
       return;
     }
     window.localStorage.setItem(OPENAI_API_KEY_STORAGE_KEY, normalized);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function readBrowserGeminiApiKey() {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function writeBrowserGeminiApiKey(value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const normalized = value.trim();
+    if (!normalized) {
+      window.localStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, normalized);
   } catch {
     // ignore storage errors
   }

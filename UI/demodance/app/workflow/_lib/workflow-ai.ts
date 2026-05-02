@@ -54,7 +54,7 @@ function stepGuidance(stepId: StepId): string {
   const guidance: Record<StepId, string> = {
     audience: "Fields must identify a specific target user and one concrete problem they feel often.",
     importance:
-      "Field must describe an evidence angle from provided context only. Write 2 to 4 full sentences that explain signal, urgency, or demo proof with enough substance to sound persuasive. Do not invent citations, numbers, URLs, or external research.",
+      "Field must explain why this project matters in the real world. Write 2 to 4 full sentences about the broader social value, practical importance, urgency, or meaningful impact of solving this problem. Use the submission as the main source of truth. The uploaded demo can support context, but do not rely on demo proof as the core argument. Do not invent citations, numbers, URLs, or external research.",
     product: "Fields must make the product easy to remember: short name, sticky slogan, and logo prompt/context if needed.",
     features: "Each feature must be one sentence with user action, system response, and user value.",
     tech: "Explain stack and model/API flow in a way a technical judge can understand quickly.",
@@ -75,7 +75,7 @@ export function buildSuggestPrompt(locale: "en" | "zh", activeStep: Step, curren
     "Fill concise, practical launch-video copy for current step fields.",
     stepGuidance(activeStep.id),
     activeStep.id === "importance"
-      ? "For Evidence Angle specifically, avoid one-liners. Expand it into a compact but convincing paragraph."
+      ? "For Evidence Angle specifically, avoid one-liners. Expand it into a compact but convincing paragraph focused on why the project matters to people, society, or the market."
       : "",
     "If a current value is not empty, improve it while preserving its facts instead of replacing it with unrelated claims.",
     "JSON schema:",

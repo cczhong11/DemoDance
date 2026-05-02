@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 
+import { readGeminiApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readJsonBody } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -15,9 +16,6 @@ const DEFAULT_SPEAKERS: SpeakerVoiceInput[] = [
   { speaker: "Dr. Anya", voiceName: "Kore" },
   { speaker: "Liam", voiceName: "Puck" },
 ] as const;
-
-const geminiApiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
-const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
 type SpeakerVoiceInput = {
   speaker: string;
@@ -122,6 +120,8 @@ function createWavBuffer(pcmBuffer: Buffer, format: PcmAudioFormat): Buffer {
 
 export async function POST(request: Request) {
   const data = await readJsonBody(request);
+  const geminiApiKey = readGeminiApiKeyOverride(request) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+  const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
   if (!ai) {
     return jsonError("GEMINI_API_KEY or GOOGLE_API_KEY is not set", 500);

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../_components/app-shell";
 import { AssistantPanel } from "../_components/assistant-panel";
 import { LanguageToggle } from "../_components/language-toggle";
+import { readBrowserGeminiApiKey } from "../_lib/browser-settings";
 import { storeGeneratedImage } from "../_lib/generated-image-storage";
 import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
@@ -320,9 +321,13 @@ export default function GeneratePage() {
     setVoiceoverGenerating(true);
 
     try {
+      const geminiApiKey = readBrowserGeminiApiKey();
       const response = await fetch("/api/audio/speech", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(geminiApiKey ? { "x-gemini-api-key": geminiApiKey } : {}),
+        },
         body: JSON.stringify({
           input: narrationText,
           base64: true,

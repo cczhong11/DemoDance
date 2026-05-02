@@ -84,13 +84,13 @@ export function getInitialSteps(locale: LocaleCode): Step[] {
       id: "importance",
       index: 2,
       title: isEn ? "Problem Importance" : "问题的重要性",
-      subtitle: isEn ? "Summarize why this problem matters using the submission and demo context" : "结合提交文本和 demo 语境说明这个问题为什么重要",
+      subtitle: isEn ? "Explain why this project matters and what broader social value it creates" : "说明这个项目为什么重要，以及它能带来的更广泛社会价值",
       fields: [
         {
           key: "evidence",
           label: "Evidence Angle",
           value: "",
-          placeholder: isEn ? "Summarize the signal, urgency, or demo proof..." : "总结需求信号、紧迫性或 demo 证明…",
+          placeholder: isEn ? "Why does this matter socially, practically, or at scale?" : "这个项目在社会层面、现实层面或规模化层面为什么重要？",
         },
       ],
     },
