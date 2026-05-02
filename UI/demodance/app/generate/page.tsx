@@ -22,7 +22,7 @@ function statusClass(status: "idle" | "generating" | "done"): "waiting" | "gener
 
 export default function GeneratePage() {
   const { tr, locale } = useLocale();
-  const { projectName, steps, getStepScript, renderSections, setRenderSections } = useWorkflowStore();
+  const { projectName, steps, getStepScript, renderSections, setRenderSections, featureFrames } = useWorkflowStore();
   const [renderingAll, setRenderingAll] = useState(false);
   const [combining, setCombining] = useState(false);
   const [voiceoverGenerating, setVoiceoverGenerating] = useState(false);
@@ -135,7 +135,19 @@ export default function GeneratePage() {
     );
 
     try {
-      const { frames, prompt } = await generateStoryboardFrames(steps, getStepScript, projectName, sectionId, locale);
+      let referenceImages: string[] = [];
+      if (sectionId === "features") {
+        referenceImages = [featureFrames.feature1, featureFrames.feature2, featureFrames.feature3].filter((frame): frame is string => Boolean(frame));
+      } else if (sectionId === "product" || sectionId === "impact") {
+        const logoUrl = steps.find(s => s.id === "product")?.fields.find(f => f.key === "logo")?.value;
+        if (typeof logoUrl === "string" && logoUrl) {
+          referenceImages.push(logoUrl);
+        }
+        if (sectionId === "product" && featureFrames.feature1) {
+          referenceImages.push(featureFrames.feature1);
+        }
+      }
+      const { frames, prompt } = await generateStoryboardFrames(steps, getStepScript, projectName, sectionId, locale, referenceImages);
       const storedFrames = await Promise.all(
         frames.map((frame, index) =>
           storeGeneratedImage(

@@ -149,9 +149,17 @@ function buildStoryboardProductImageGuidance(steps: Step[], sectionId: StepId): 
     ];
   }
 
+  if (sectionId === "product") {
+    return [
+      `Branded product-image rule: This is the Product Intro chapter. Focus heavily on presenting the ${productLabel} brand identity and its logo.`,
+      "Detailed product features will be explained in the next chapter, so keep the actual UI or feature displays very minimal or abstracted.",
+      "The primary visual goal here is brand establishment and mood, using the provided logo and brand atmosphere.",
+    ];
+  }
+
   return [
     "Branded product-image rule: do not show the product image in this storyboard.",
-    `This is not Stage 4, so avoid hero shots of ${productLabel}, avoid splash screens, avoid prominent branded UI/product shots, and avoid any logo-centric composition.`,
+    `This is not the product or features stage, so avoid hero shots of ${productLabel}, avoid splash screens, avoid prominent branded UI/product shots, and avoid any logo-centric composition.`,
     "Keep the visuals focused on the user problem, stakes, workflow context, or future outcome instead of the branded product reveal.",
   ];
 }
@@ -278,6 +286,7 @@ export async function generateStoryboardFrames(
   projectName: string,
   sectionId: StepId,
   language: LocaleCode,
+  referenceImages: string[] = []
 ): Promise<{ prompt: string; frames: string[] }> {
   const summary = summarizeStep(steps, getStepScript, sectionId);
   const sectionTitle = steps.find((item) => item.id === sectionId)?.title ?? sectionId;
@@ -325,6 +334,7 @@ export async function generateStoryboardFrames(
       quality: "low",
       output_format: "webp",
       response_format: "url",
+      image: referenceImages.length > 0 ? referenceImages : undefined,
     },
     "Failed to generate storyboard images",
   );

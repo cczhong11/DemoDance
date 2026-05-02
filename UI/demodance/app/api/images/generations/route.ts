@@ -82,27 +82,74 @@ export async function POST(request: Request) {
   const n = Number.isFinite(nRaw) && nRaw > 0 ? Math.min(nRaw, 10) : 1;
 
   const images = Array.isArray(data.image) ? data.image : data.image ? [data.image] : [];
-  const ignoredImageInputs = images.filter((img) => Boolean(img)).length;
-
-  const upstreamPayload: Record<string, unknown> = {
-    model,
-    prompt,
-    n,
-  };
-  if (size) upstreamPayload.size = size;
-  if (quality) upstreamPayload.quality = quality;
-  if (background) upstreamPayload.background = background;
-  if (outputFormat) upstreamPayload.output_format = outputFormat;
+  const validImages = images.filter((img) => typeof img === "string" && (img.startsWith("data:image/") || img.startsWith("http://") || img.startsWith("https://")));
 
   try {
-    const response = await fetch(`${openai.baseUrl}/images/generations`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify(upstreamPayload),
-    });
+    let response: Response;
+
+    if (validImages.length > 0) {
+      const formData = new FormData();
+      formData.append("model", model);
+      formData.append("prompt", prompt);
+      formData.append("n", String(n));
+      if (size) formData.append("size", size);
+      if (outputFormat) formData.append("output_format", outputFormat);
+
+      for (let i = 0; i < validImages.length; i++) {
+        let buffer: Buffer | null = null;
+        let mime = "image/png";
+
+        if (validImages[i].startsWith("data:image/")) {
+          const base64 = validImages[i].split(",")[1];
+          const mimeMatch = validImages[i].match(/^data:(.*?);base64,/);
+          mime = mimeMatch ? mimeMatch[1] : "image/png";
+          buffer = Buffer.from(base64, "base64");
+        } else {
+          try {
+            const res = await fetch(validImages[i]);
+            if (res.ok) {
+              const arrayBuffer = await res.arrayBuffer();
+              buffer = Buffer.from(arrayBuffer);
+              mime = res.headers.get("content-type") || mime;
+            }
+          } catch (e) {
+            // skip failed fetches
+          }
+        }
+
+        if (buffer) {
+          const blob = new Blob([new Uint8Array(buffer)], { type: mime });
+          formData.append("image[]", blob, `image${i}.png`);
+        }
+      }
+
+      response = await fetch(`${openai.baseUrl}/images/edits`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openaiApiKey}`,
+        },
+        body: formData,
+      });
+    } else {
+      const upstreamPayload: Record<string, unknown> = {
+        model,
+        prompt,
+        n,
+      };
+      if (size) upstreamPayload.size = size;
+      if (quality) upstreamPayload.quality = quality;
+      if (background) upstreamPayload.background = background;
+      if (outputFormat) upstreamPayload.output_format = outputFormat;
+
+      response = await fetch(`${openai.baseUrl}/images/generations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify(upstreamPayload),
+      });
+    }
 
     if (!response.ok) {
       const details = await readResponseDetails(response);
@@ -138,12 +185,6 @@ export async function POST(request: Request) {
       created: typeof raw.created === "number" ? raw.created : Math.floor(Date.now() / 1000),
       model: typeof raw.model === "string" ? raw.model : model,
       data: mappedData,
-      warnings:
-        ignoredImageInputs > 0
-          ? [
-              `Ignored ${ignoredImageInputs} image input(s): OpenAI text-to-image endpoint does not accept image edit inputs.`,
-            ]
-          : undefined,
     });
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
