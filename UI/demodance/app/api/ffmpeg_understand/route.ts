@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
-import { getIonRouterConfig, resolveIonRouterBaseUrlByModel } from "@/lib/server/config";
+import { getOpenAIConfig, readOpenAIApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -167,7 +167,7 @@ async function analyzeBatchWithVisionModel(input: {
     body: JSON.stringify({
       model: input.model,
       temperature: 0,
-      max_tokens: input.maxTokens,
+      max_completion_tokens: input.maxTokens,
       messages: [{ role: "user", content }],
     }),
   });
@@ -178,10 +178,26 @@ async function analyzeBatchWithVisionModel(input: {
   }
 
   const result = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: unknown } }>;
   };
 
-  const text = result.choices?.[0]?.message?.content ?? "";
+  const rawContent = result.choices?.[0]?.message?.content;
+  const text =
+    typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent
+            .map((part) => {
+              if (typeof part === "string") return part;
+              if (part && typeof part === "object" && "text" in part) {
+                const value = (part as { text?: unknown }).text;
+                return typeof value === "string" ? value : "";
+              }
+              return "";
+            })
+            .filter(Boolean)
+            .join("\n")
+        : "";
   const parsed = extractJsonObject(text);
   return normalizeInsights(parsed);
 }
@@ -243,12 +259,13 @@ async function parseInput(request: Request, defaultModel: string): Promise<Parse
 }
 
 export async function POST(request: Request) {
-  const ion = getIonRouterConfig();
-  if (!ion.apiKey) {
-    return jsonError("IONROUTER_API_KEY is not set", 500);
+  const openai = getOpenAIConfig();
+  const openaiApiKey = readOpenAIApiKeyOverride(request) || openai.apiKey;
+  if (!openaiApiKey) {
+    return jsonError("OPENAI_API_KEY is not set", 500);
   }
 
-  const defaultModel = process.env.FFMPEG_UNDERSTAND_MODEL ?? "Qwen3-VL-8B";
+  const defaultModel = process.env.FFMPEG_UNDERSTAND_MODEL ?? "gpt-5.4-nano";
   const parsed = await parseInput(request, defaultModel);
   if ("error" in parsed) {
     return parsed.error;
@@ -299,12 +316,11 @@ export async function POST(request: Request) {
 
     const batches = chunkArray(frames, parsed.batchSize);
     const frameInsights: FrameInsight[] = [];
-    const baseUrl = resolveIonRouterBaseUrlByModel(parsed.model, ion.baseUrl);
 
     for (const batch of batches) {
       const insights = await analyzeBatchWithVisionModel({
-        apiKey: ion.apiKey,
-        baseUrl,
+        apiKey: openaiApiKey,
+        baseUrl: openai.baseUrl,
         model: parsed.model,
         prompt: parsed.prompt,
         maxTokens: parsed.maxTokens,

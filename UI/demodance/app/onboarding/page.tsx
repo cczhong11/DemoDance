@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../_components/app-shell";
 import { AssistantPanel } from "../_components/assistant-panel";
 import { LanguageToggle } from "../_components/language-toggle";
+import { extractFeatureKeyframes } from "../_lib/video-keyframes";
 import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
 import { useWorkflowStore } from "../_state/workflow-store";
@@ -22,6 +23,7 @@ export default function OnboardingPage() {
     setDemoVideo,
     setActiveStepId,
     fillStepFields,
+    setFeatureFrames,
     setChat,
   } = useWorkflowStore();
 
@@ -47,6 +49,10 @@ export default function OnboardingPage() {
         parseSubmission(input),
         demoVideoFile ? analyzeDemoVideo(demoVideoFile).catch(() => null) : Promise.resolve(null),
       ]);
+      const extractedFrames =
+        demoVideoFile && videoAnalysis
+          ? await extractFeatureKeyframes(demoVideoFile, videoAnalysis.segments).catch(() => [])
+          : [];
       const videoFeatures = videoAnalysis?.features ?? [];
       const evidenceNote = videoAnalysis
         ? tr(
@@ -70,6 +76,11 @@ export default function OnboardingPage() {
         feature1: videoFeatures[0] || parsed.feature1,
         feature2: videoFeatures[1] || parsed.feature2,
         feature3: videoFeatures[2] || parsed.feature3,
+      });
+      setFeatureFrames({
+        feature1: extractedFrames[0],
+        feature2: extractedFrames[1],
+        feature3: extractedFrames[2],
       });
       fillStepFields("tech", { stack: parsed.techStack || "Next.js · OpenAI · FFmpeg" });
       fillStepFields("impact", {

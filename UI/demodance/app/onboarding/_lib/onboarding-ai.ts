@@ -1,4 +1,5 @@
 import { extractJsonObject, readAssistantText } from "@/app/_lib/assistant-response";
+import { readBrowserOpenAIApiKey } from "@/app/_lib/browser-settings";
 import { postJson } from "@/app/_lib/client-api";
 
 type TextChatResponse = {
@@ -84,9 +85,11 @@ export async function analyzeDemoVideo(file: File): Promise<VideoAnalysis | null
   const form = new FormData();
   form.append("file", file, file.name || "demo-video.mp4");
   form.append("prompt", "Extract product features, UI flow, and the user value shown in this raw demo video.");
+  const openaiApiKey = readBrowserOpenAIApiKey();
 
   const response = await fetch("/api/video/analyze", {
     method: "POST",
+    headers: openaiApiKey ? { "x-openai-api-key": openaiApiKey } : undefined,
     body: form,
   });
   if (!response.ok) return null;

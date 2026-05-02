@@ -38,6 +38,7 @@ export default function WorkflowPage() {
     fillStepFields,
     getStepScript,
     setStepScript,
+    featureFrames,
     setLogoAsset,
     chat,
     setChat,
@@ -366,6 +367,40 @@ export default function WorkflowPage() {
                         </label>
                       </div>
                     </div>
+                  </div>
+                ) : activeStep.id === "features" ? (
+                  <div className="mt-5 grid grid-cols-1 gap-4">
+                    {activeStep.fields.map((field) => {
+                      const frameUrl = featureFrames[field.key as "feature1" | "feature2" | "feature3"];
+                      return (
+                        <label key={field.key} className="block">
+                          <div className="text-[17px] text-[var(--dd-text-secondary)]">{field.label}</div>
+                          <div className="mt-2 grid grid-cols-[180px_minmax(0,1fr)] gap-4 items-start">
+                            <div className="rounded-xl border border-[var(--dd-border-subtle)] bg-[rgba(7,13,24,0.85)] aspect-video overflow-hidden">
+                              {frameUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={frameUrl} alt={`${field.label} keyframe`} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-sm text-[var(--dd-text-muted)]">
+                                  {tr("No keyframe", "暂无关键帧")}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <input
+                                className="dd-input text-lg"
+                                value={field.value}
+                                onChange={(e) => updateField(activeStep.id, field.key, e.target.value)}
+                                placeholder={field.placeholder}
+                              />
+                              <div className="mt-2 text-sm text-[var(--dd-text-muted)]">
+                                {field.value.length} / {fieldCounter(field.key)}
+                              </div>
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="mt-5 grid grid-cols-2 gap-4">

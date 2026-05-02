@@ -12,6 +12,8 @@ export type DemoVideoMeta = {
   url?: string;
 };
 
+export type FeatureFrameMap = Partial<Record<"feature1" | "feature2" | "feature3", string>>;
+
 export type StoredAssetRef = {
   objectId: string;
   url: string;
@@ -76,6 +78,7 @@ type StoreState = {
   activeStepId: StepId;
   fieldValues: Record<string, string>;
   stepScripts: Record<StepId, string>;
+  featureFrames: FeatureFrameMap;
   chat: ChatMsg[];
   renderSections: SectionRender[];
   logoAsset: StoredAssetRef | null;
@@ -98,6 +101,8 @@ type WorkflowStoreValue = {
   fillStepFields: (stepId: StepId, values: Record<string, string>) => void;
   getStepScript: (stepId: StepId) => string;
   setStepScript: (stepId: StepId, script: string) => void;
+  featureFrames: FeatureFrameMap;
+  setFeatureFrames: (frames: FeatureFrameMap) => void;
   logoAsset: StoredAssetRef | null;
   setLogoAsset: (asset: StoredAssetRef | null) => void;
   chat: ChatMsg[];
@@ -179,6 +184,7 @@ function buildDefaultState(locale: "en" | "zh" = "en"): StoreState {
     activeStepId: "audience",
     fieldValues: DEFAULT_FIELD_VALUES,
     stepScripts: DEFAULT_STEP_SCRIPTS,
+    featureFrames: {},
     chat: getInitialChat(locale),
     renderSections: getDefaultRenderSections(),
     logoAsset: null,
@@ -236,6 +242,10 @@ function loadStoredState(): StoreState {
                   : DEFAULT_STEP_SCRIPTS.impact,
             }
           : DEFAULT_STEP_SCRIPTS,
+      featureFrames:
+        parsed.featureFrames && typeof parsed.featureFrames === "object"
+          ? (parsed.featureFrames as FeatureFrameMap)
+          : {},
       chat: Array.isArray(parsed.chat) && parsed.chat.length > 0 ? (parsed.chat as ChatMsg[]) : getInitialChat("en"),
       renderSections:
         Array.isArray(parsed.renderSections) && parsed.renderSections.length > 0
@@ -304,6 +314,10 @@ function buildStateFromLoadedProject(
         ? { ...DEFAULT_FIELD_VALUES, ...(project.fieldValues as Record<string, string>) }
         : base.fieldValues,
     stepScripts: normalizeLoadedStepScripts(project.stepScripts),
+    featureFrames:
+      project.featureFrames && typeof project.featureFrames === "object"
+        ? (project.featureFrames as FeatureFrameMap)
+        : base.featureFrames,
     chat: Array.isArray(project.chat) && project.chat.length > 0 ? (project.chat as ChatMsg[]) : getInitialChat(locale),
     renderSections,
     logoAsset:
@@ -602,6 +616,15 @@ export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
             [stepId]: script,
           },
         })),
+      featureFrames: state.featureFrames,
+      setFeatureFrames: (featureFrames) =>
+        setStateAndPersist((prev) => ({
+          ...prev,
+          featureFrames: {
+            ...prev.featureFrames,
+            ...featureFrames,
+          },
+        })),
       logoAsset: state.logoAsset,
       setLogoAsset: (logoAsset) =>
         setStateAndPersist((prev) => ({
@@ -633,6 +656,7 @@ export function WorkflowStoreProvider({ children }: { children: ReactNode }) {
           activeStepId: "audience",
           fieldValues: DEFAULT_FIELD_VALUES,
           stepScripts: DEFAULT_STEP_SCRIPTS,
+          featureFrames: {},
           chat: getInitialChat(locale),
           renderSections: getDefaultRenderSections(),
           logoAsset: null,
