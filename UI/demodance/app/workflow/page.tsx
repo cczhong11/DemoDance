@@ -53,6 +53,7 @@ export default function WorkflowPage() {
   const [scriptGenerating, setScriptGenerating] = useState(false);
   const [logoGenerating, setLogoGenerating] = useState(false);
   const [manualSaveBusy, setManualSaveBusy] = useState(false);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
 
   const activeStep = steps.find((step) => step.id === activeStepId) ?? steps[0];
   const activeIndex = workflowStepOrder.indexOf(activeStep.id);
@@ -74,6 +75,7 @@ export default function WorkflowPage() {
   }, [steps, getStepScript]);
   const activeStepUi = workflowStepUiMap[activeStep.id];
   const activeStepScript = getStepScript(activeStep.id);
+  const hasProjectTitle = projectName.trim().length > 0;
 
   async function runAiSuggest() {
     if (aiSuggestLoading) return;
@@ -225,6 +227,16 @@ export default function WorkflowPage() {
     }
   }
 
+  function goNextStep() {
+    if (!hasProjectTitle) {
+      setNavigationError(tr("Project title is required before continuing.", "请先填写项目名称再继续下一步。"));
+      return;
+    }
+    if (!nextStepId) return;
+    setNavigationError(null);
+    setActiveStepId(nextStepId);
+  }
+
   return (
     <AppShell>
       <main className="dd-page-grid">
@@ -260,7 +272,17 @@ export default function WorkflowPage() {
               <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-8">
                 <label className="block">
                   <div className="text-[17px] text-[var(--dd-text-secondary)]">Project Name <span className="zh-only">/ 项目名称</span></div>
-                  <input className="dd-input mt-2 text-lg" value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+                  <input
+                    className="dd-input mt-2 text-lg"
+                    value={projectName}
+                    onChange={(e) => {
+                      setProjectName(e.target.value);
+                      if (e.target.value.trim().length > 0 && navigationError) {
+                        setNavigationError(null);
+                      }
+                    }}
+                  />
+                  {navigationError ? <div className="mt-2 text-sm text-[var(--dd-danger)]">{navigationError}</div> : null}
                 </label>
                 <div>
                   <div className="flex items-center justify-between text-[17px] text-[var(--dd-text-secondary)]">
@@ -468,7 +490,12 @@ export default function WorkflowPage() {
                   )}
 
                   {nextStepId ? (
-                    <button type="button" className="dd-btn-primary h-11 px-7" onClick={() => setActiveStepId(nextStepId)}>
+                    <button
+                      type="button"
+                      className={`dd-btn-primary h-11 px-7 ${hasProjectTitle ? "" : "opacity-60 cursor-not-allowed"}`}
+                      onClick={goNextStep}
+                      disabled={!hasProjectTitle}
+                    >
                       Next <span className="zh-only">/ 下一步</span>
                     </button>
                   ) : (
