@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Image from "next/image";
+import { readBrowserOpenAIApiKey } from "../_lib/browser-settings";
 import { useLocale } from "../locale-provider";
 
 type ApiResult = {
@@ -11,10 +12,12 @@ type ApiResult = {
 };
 
 async function callJsonApi(method: string, url: string, body?: unknown): Promise<ApiResult> {
+  const openaiApiKey = readBrowserOpenAIApiKey();
   const response = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",
+      ...(openaiApiKey ? { "x-openai-api-key": openaiApiKey } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -165,8 +168,10 @@ export default function ApiTestPage() {
       form.append("model", srtModel.trim());
     }
 
+    const openaiApiKey = readBrowserOpenAIApiKey();
     const response = await fetch("/api/audio/srt", {
       method: "POST",
+      headers: openaiApiKey ? { "x-openai-api-key": openaiApiKey } : undefined,
       body: form,
     });
 

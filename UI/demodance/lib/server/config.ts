@@ -37,6 +37,11 @@ export function getOpenAIConfig(): OpenAIConfig {
   };
 }
 
+export function readOpenAIApiKeyOverride(request: Request): string {
+  const headerValue = request.headers.get("x-openai-api-key") ?? "";
+  return headerValue.trim();
+}
+
 const KIMI_K25_BASE_URL = "https://kimi.ionrouter.io/v1";
 
 export function resolveIonRouterBaseUrlByModel(model: string | undefined, fallbackBaseUrl: string): string {

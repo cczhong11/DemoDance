@@ -1,3 +1,5 @@
+import { readBrowserOpenAIApiKey } from "./browser-settings";
+
 type ApiErrorPayload = {
   error?: unknown;
   details?: unknown;
@@ -19,9 +21,13 @@ function readErrorMessage(data: unknown, fallback: string): string {
 }
 
 export async function postJson<TResponse>(url: string, body: unknown, fallbackError: string): Promise<TResponse> {
+  const openaiApiKey = readBrowserOpenAIApiKey();
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(openaiApiKey ? { "x-openai-api-key": openaiApiKey } : {}),
+    },
     body: JSON.stringify(body),
   });
   const data = (await response.json()) as unknown;

@@ -1,9 +1,10 @@
+import { readOpenAIApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const openaiApiKey = process.env.OPENAI_API_KEY ?? "";
+  const openaiApiKey = readOpenAIApiKeyOverride(request) || (process.env.OPENAI_API_KEY ?? "");
   const defaultModel = process.env.OPENAI_STT_MODEL ?? "whisper-1";
 
   if (!openaiApiKey) {

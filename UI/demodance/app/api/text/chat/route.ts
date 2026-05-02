@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getOpenAIConfig } from "@/lib/server/config";
+import { getOpenAIConfig, readOpenAIApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -43,8 +43,9 @@ function extractAssistantText(payload: unknown): string {
 export async function POST(request: Request) {
   const data = await readJsonBody(request);
   const config = getOpenAIConfig();
+  const openaiApiKey = readOpenAIApiKeyOverride(request) || config.apiKey;
 
-  if (!config.apiKey) {
+  if (!openaiApiKey) {
     return jsonError("OPENAI_API_KEY is not set", 500);
   }
 
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
       const response = await fetch(`${config.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.apiKey}`,
+          Authorization: `Bearer ${openaiApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getOpenAIConfig } from "@/lib/server/config";
+import { getOpenAIConfig, readOpenAIApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -59,7 +59,7 @@ function getMimeTypeFromOutputFormat(value: unknown): string {
 
 export async function POST(request: Request) {
   const openai = getOpenAIConfig();
-  const openaiApiKey = openai.apiKey;
+  const openaiApiKey = readOpenAIApiKeyOverride(request) || openai.apiKey;
   const defaultImageModel = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2";
 
   if (!openaiApiKey) {
