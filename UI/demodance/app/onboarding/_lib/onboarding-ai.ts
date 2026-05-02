@@ -28,6 +28,7 @@ export type VideoAnalysis = {
     label: string;
     caption: string;
     confidence: number;
+    dataUrl?: string;
   }>;
   sourceEngine: string;
   fallbackUsed: boolean;
@@ -118,6 +119,7 @@ export async function analyzeDemoVideo(file: File): Promise<VideoAnalysis | null
           label: typeof row.label === "string" ? row.label : "Feature Segment",
           caption,
           confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : 0.5,
+          dataUrl: typeof row.dataUrl === "string" ? row.dataUrl : undefined,
         }];
       })
     : [];

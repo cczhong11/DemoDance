@@ -49,10 +49,11 @@ export default function OnboardingPage() {
         parseSubmission(input),
         demoVideoFile ? analyzeDemoVideo(demoVideoFile).catch(() => null) : Promise.resolve(null),
       ]);
-      const extractedFrames =
-        demoVideoFile && videoAnalysis
-          ? await extractFeatureKeyframes(demoVideoFile, videoAnalysis.segments).catch(() => [])
-          : [];
+      const backendFrames = videoAnalysis?.segments.map(s => s.dataUrl).filter(Boolean) as string[] ?? [];
+      let extractedFrames = backendFrames;
+      if (extractedFrames.length < 3 && demoVideoFile && videoAnalysis) {
+        extractedFrames = await extractFeatureKeyframes(demoVideoFile, videoAnalysis.segments).catch(() => []);
+      }
       const videoFeatures = videoAnalysis?.features ?? [];
       const evidenceNote = videoAnalysis
         ? tr(

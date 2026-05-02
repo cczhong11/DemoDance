@@ -12,6 +12,7 @@ type NormalizedSegment = {
   label: string;
   caption: string;
   confidence: number;
+  dataUrl?: string;
 };
 
 type AnalyzeResult = {
@@ -38,15 +39,16 @@ function summarizeFrames(payload: unknown): { features: string[]; segments: Norm
       const row = f as Record<string, unknown>;
       const second = Number.parseFloat(String(row.second ?? ""));
       const summary = readMaybeString(row.summary);
+      const dataUrl = readMaybeString(row.dataUrl);
       if (!Number.isFinite(second) || !summary) return null;
-      return { second, summary };
+      return { second, summary, dataUrl };
     })
-    .filter((v): v is { second: number; summary: string } => Boolean(v));
+    .filter((v): v is { second: number; summary: string; dataUrl: string } => Boolean(v));
 
   if (normalized.length === 0) return null;
 
   const pickCount = Math.min(3, normalized.length);
-  const picks: { second: number; summary: string }[] = [];
+  const picks: { second: number; summary: string; dataUrl: string }[] = [];
 
   for (let i = 0; i < pickCount; i += 1) {
     const idx = Math.floor((i * (normalized.length - 1)) / Math.max(1, pickCount - 1));
@@ -59,6 +61,7 @@ function summarizeFrames(payload: unknown): { features: string[]; segments: Norm
     label: `Feature ${idx + 1}`,
     caption: p.summary,
     confidence: 0.6,
+    dataUrl: p.dataUrl,
   }));
 
   return {

@@ -25,6 +25,7 @@ type FrameInsight = {
   summary: string;
   tags?: string[];
   danger?: "low" | "medium" | "high";
+  dataUrl?: string;
 };
 
 const MAX_ANALYSIS_FRAMES = 20;
@@ -357,9 +358,16 @@ export async function POST(request: Request) {
             second: frame.second,
             summary: "No structured summary returned for this frame.",
             danger: "low",
+            dataUrl: frame.dataUrl,
           });
         }
       } else {
+        for (const insight of insights) {
+          const originalFrame = batch.find((f) => f.second === insight.second);
+          if (originalFrame) {
+            insight.dataUrl = originalFrame.dataUrl;
+          }
+        }
         frameInsights.push(...insights);
       }
     }
