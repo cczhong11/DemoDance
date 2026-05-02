@@ -20,6 +20,14 @@ function statusClass(status: "idle" | "generating" | "done"): "waiting" | "gener
   return "waiting";
 }
 
+function readApiStateErrorMessage(apiState: string | undefined): string | null {
+  if (!apiState || !apiState.startsWith("error:")) {
+    return null;
+  }
+  const message = apiState.slice("error:".length).trim();
+  return message || "Unknown error";
+}
+
 export default function GeneratePage() {
   const { tr, locale } = useLocale();
   const { projectName, steps, getStepScript, renderSections, setRenderSections, featureFrames } = useWorkflowStore();
@@ -533,6 +541,11 @@ export default function GeneratePage() {
                         <span className={`dd-status-pill ${section.videoUrl ? "done" : (section.taskId || section.apiState === "video-queued") && !section.apiState?.startsWith("error") ? "generating" : "waiting"}`}>
                           {section.videoUrl ? "Done" : (section.taskId || section.apiState === "video-queued") && !section.apiState?.startsWith("error") ? "Generating..." : "Waiting"}
                         </span>
+                        {readApiStateErrorMessage(section.apiState) ? (
+                          <div className="mt-1 text-xs text-red-500 break-words">
+                            {readApiStateErrorMessage(section.apiState)}
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         <div className="flex items-center gap-2">
