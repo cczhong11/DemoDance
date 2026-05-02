@@ -1,6 +1,7 @@
 import { AppShell } from "../_components/app-shell";
 import { butterbaseRequest } from "@/lib/server/butterbase/client";
 import { NewProjectButton } from "./new-project-button";
+import { ProjectCard } from "./project-card";
 
 type ButterbaseProject = {
   id?: unknown;
@@ -115,21 +116,13 @@ export default async function ProjectsPage() {
           ) : (
             <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
               {projects.map((project) => (
-                <div
+                <ProjectCard
                   key={project.id}
-                  className="dd-sidebar-card cursor-pointer p-5 transition-colors hover:border-[var(--dd-brand-purple)]"
-                >
-                  <div className="mb-4 grid h-32 place-items-center rounded-lg border border-[var(--dd-border-subtle)] bg-[rgba(255,255,255,0.03)]">
-                    <span className="text-4xl">🎬</span>
-                  </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-lg font-semibold">{project.name}</h3>
-                    <span className="rounded-full border border-[var(--dd-border-subtle)] px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-[var(--dd-text-muted)]">
-                      {project.status}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-[var(--dd-text-muted)]">{formatRelativeDate(project.updatedAt)}</p>
-                </div>
+                  id={project.id}
+                  name={project.name}
+                  status={project.status}
+                  updatedAtLabel={formatRelativeDate(project.updatedAt)}
+                />
               ))}
             </div>
           )}

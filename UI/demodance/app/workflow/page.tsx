@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../_components/app-shell";
 import { AssistantPanel } from "../_components/assistant-panel";
 import { LanguageToggle } from "../_components/language-toggle";
+import { storeGeneratedImage } from "../_lib/generated-image-storage";
 import { TopStepper } from "../_components/top-stepper";
 import { shrinkImageFromUrl } from "../_lib/image-utils";
 import { useLocale } from "../locale-provider";
@@ -37,6 +38,7 @@ export default function WorkflowPage() {
     fillStepFields,
     getStepScript,
     setStepScript,
+    setLogoAsset,
     chat,
     setChat,
     saveProject,
@@ -148,7 +150,12 @@ export default function WorkflowPage() {
       const sloganField = activeStep.fields.find((f) => f.key === "slogan")?.value ?? "";
       const logoUrl = await requestLogoUrl(buildLogoPrompt(nameField, sloganField));
       const compactLogoUrl = await shrinkImageFromUrl(logoUrl, 256);
-      fillStepFields("product", { logo: compactLogoUrl });
+      const storedLogo = await storeGeneratedImage(
+        compactLogoUrl,
+        `${(nameField || projectName || "demodance").trim().replace(/[^a-zA-Z0-9_-]+/g, "-") || "demodance"}-logo.webp`,
+      );
+      fillStepFields("product", { logo: storedLogo.url });
+      setLogoAsset(storedLogo);
       setActiveStepId("product");
       setChat((prev) => [
         ...prev,

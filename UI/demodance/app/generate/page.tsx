@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "../_components/app-shell";
 import { AssistantPanel } from "../_components/assistant-panel";
 import { LanguageToggle } from "../_components/language-toggle";
+import { storeGeneratedImage } from "../_lib/generated-image-storage";
 import { TopStepper } from "../_components/top-stepper";
 import { useLocale } from "../locale-provider";
 import { useWorkflowStore } from "../_state/workflow-store";
@@ -134,13 +135,22 @@ export default function GeneratePage() {
 
     try {
       const { frames, prompt } = await generateStoryboardFrames(steps, getStepScript, projectName, sectionId, locale);
+      const storedFrames = await Promise.all(
+        frames.map((frame, index) =>
+          storeGeneratedImage(
+            frame,
+            `${(projectName || "demodance").trim().replace(/[^a-zA-Z0-9_-]+/g, "-") || "demodance"}-${sectionId}-storyboard-${index + 1}.webp`,
+          ),
+        ),
+      );
       setRenderSections((prev) =>
         prev.map((item) =>
           item.id === sectionId
             ? {
                 ...item,
                 status: "done",
-                storyboardFrames: frames,
+                storyboardFrames: storedFrames.map((asset) => asset.url),
+                storyboardAssets: storedFrames,
                 storyboardPrompt: prompt,
                 version: item.version + 1,
                 apiState: "storyboard-ready",
@@ -159,6 +169,21 @@ export default function GeneratePage() {
         ),
       );
     }
+  }
+
+  function resetStoryboardSection(sectionId: StepId) {
+    setRenderSections((prev) =>
+      prev.map((item) =>
+        item.id === sectionId
+          ? {
+              ...item,
+              status: item.storyboardFrames?.length ? "done" : "idle",
+              apiState: undefined,
+              progress: undefined,
+            }
+          : item,
+      ),
+    );
   }
 
   async function generateVideoSection(sectionId: StepId) {
@@ -233,7 +258,7 @@ export default function GeneratePage() {
       setRenderSections((prev) =>
         prev.map((item) =>
           item.id === section.id
-            ? { ...item, storyboardFrames: [], storyboardPrompt: undefined, progress: 0, status: "idle" }
+            ? { ...item, storyboardFrames: [], storyboardAssets: [], storyboardPrompt: undefined, progress: 0, status: "idle" }
             : item,
         ),
       );
@@ -429,6 +454,16 @@ export default function GeneratePage() {
                       >
                         {section.storyboardFrames?.length ? "Regenerate This Section" : "Generate This Section"}
                       </button>
+                      {section.status === "generating" && (section.progress ?? 0) <= 0 ? (
+                        <button
+                          type="button"
+                          className="dd-btn-secondary h-9 px-3 text-sm"
+                          onClick={() => resetStoryboardSection(section.id)}
+                          disabled={renderingAll}
+                        >
+                          Reset
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 ))}
