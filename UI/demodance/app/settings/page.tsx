@@ -7,23 +7,32 @@ import {
   maskApiKey,
   readBrowserGeminiApiKey,
   readBrowserOpenAIApiKey,
+  readBrowserSeedanceApiKey,
   writeBrowserGeminiApiKey,
   writeBrowserOpenAIApiKey,
+  writeBrowserSeedanceApiKey,
 } from "../_lib/browser-settings";
 
 export default function SettingsPage() {
   const [teamName, setTeamName] = useState("Demo Team");
   const [openaiApiKey, setOpenaiApiKey] = useState(() => readBrowserOpenAIApiKey());
   const [geminiApiKey, setGeminiApiKey] = useState(() => readBrowserGeminiApiKey());
+  const [seedanceApiKey, setSeedanceApiKey] = useState(() => readBrowserSeedanceApiKey());
   const [saveMessage, setSaveMessage] = useState("");
 
   const maskedPreview = useMemo(() => maskApiKey(openaiApiKey), [openaiApiKey]);
   const maskedGeminiPreview = useMemo(() => maskApiKey(geminiApiKey), [geminiApiKey]);
+  const maskedSeedancePreview = useMemo(() => maskApiKey(seedanceApiKey), [seedanceApiKey]);
 
   function handleSave() {
     writeBrowserOpenAIApiKey(openaiApiKey);
     writeBrowserGeminiApiKey(geminiApiKey);
-    setSaveMessage(openaiApiKey.trim() || geminiApiKey.trim() ? "Saved in this browser." : "Cleared from this browser.");
+    writeBrowserSeedanceApiKey(seedanceApiKey);
+    setSaveMessage(
+      openaiApiKey.trim() || geminiApiKey.trim() || seedanceApiKey.trim()
+        ? "Saved in this browser."
+        : "Cleared from this browser.",
+    );
   }
 
   return (
@@ -85,6 +94,24 @@ export default function SettingsPage() {
                   </p>
                   <p className="mt-1 text-xs text-[var(--dd-text-secondary)]">
                     Current value: {maskedGeminiPreview || "Not set"}
+                  </p>
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-sm text-[var(--dd-text-secondary)]">Seedance API Key (BytePlus)</div>
+                  <input
+                    type="password"
+                    className="dd-input"
+                    value={seedanceApiKey}
+                    onChange={(event) => setSeedanceApiKey(event.target.value)}
+                    placeholder="BytePlus / ARK key"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <p className="mt-1 text-xs text-[var(--dd-text-muted)]">
+                    Used for BytePlus/Seedance video generation APIs. Stored only in this browser and sent with Seedance-backed requests from this device.
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--dd-text-secondary)]">
+                    Current value: {maskedSeedancePreview || "Not set"}
                   </p>
                 </label>
               </div>

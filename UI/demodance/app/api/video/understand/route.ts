@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getBytePlusConfig } from "@/lib/server/config";
+import { getBytePlusConfig, readSeedanceApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -85,7 +85,8 @@ function buildUnderstandPayload(data: Record<string, unknown>, defaultModel: str
 
 export async function POST(request: Request) {
   const config = getBytePlusConfig();
-  if (!config.apiKey) {
+  const seedanceApiKey = readSeedanceApiKeyOverride(request) || config.apiKey;
+  if (!seedanceApiKey) {
     return jsonError("BYTEPLUS_ARK_API_KEY is not set", 500);
   }
 
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
     const response = await fetch(`${config.baseUrl}/responses`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${seedanceApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(built.payload),

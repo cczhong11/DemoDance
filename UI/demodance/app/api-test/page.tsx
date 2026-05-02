@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Image from "next/image";
-import { readBrowserGeminiApiKey, readBrowserOpenAIApiKey } from "../_lib/browser-settings";
+import { readBrowserGeminiApiKey, readBrowserOpenAIApiKey, readBrowserSeedanceApiKey } from "../_lib/browser-settings";
 import { useLocale } from "../locale-provider";
 
 type ApiResult = {
@@ -14,12 +14,14 @@ type ApiResult = {
 async function callJsonApi(method: string, url: string, body?: unknown): Promise<ApiResult> {
   const openaiApiKey = readBrowserOpenAIApiKey();
   const geminiApiKey = readBrowserGeminiApiKey();
+  const seedanceApiKey = readBrowserSeedanceApiKey();
   const response = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",
       ...(openaiApiKey ? { "x-openai-api-key": openaiApiKey } : {}),
       ...(geminiApiKey ? { "x-gemini-api-key": geminiApiKey } : {}),
+      ...(seedanceApiKey ? { "x-seedance-api-key": seedanceApiKey } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

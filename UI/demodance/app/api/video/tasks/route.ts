@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getBytePlusConfig } from "@/lib/server/config";
+import { getBytePlusConfig, readSeedanceApiKeyOverride } from "@/lib/server/config";
 import { jsonError, readJsonBody, readResponseDetails } from "@/lib/server/http";
 
 export const runtime = "nodejs";
@@ -77,7 +77,8 @@ function buildVideoTaskPayload(data: Record<string, unknown>, defaultModel: stri
 
 export async function POST(request: Request) {
   const config = getBytePlusConfig();
-  if (!config.apiKey) {
+  const seedanceApiKey = readSeedanceApiKeyOverride(request) || config.apiKey;
+  if (!seedanceApiKey) {
     return jsonError("BYTEPLUS_ARK_API_KEY is not set", 500);
   }
 
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
     const response = await fetch(`${config.baseUrl}/contents/generations/tasks`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${seedanceApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(built.payload),
@@ -112,7 +113,8 @@ export async function POST(request: Request) {
 
 export async function GET(request: NextRequest) {
   const config = getBytePlusConfig();
-  if (!config.apiKey) {
+  const seedanceApiKey = readSeedanceApiKeyOverride(request) || config.apiKey;
+  if (!seedanceApiKey) {
     return jsonError("BYTEPLUS_ARK_API_KEY is not set", 500);
   }
 
@@ -166,7 +168,7 @@ export async function GET(request: NextRequest) {
   try {
     const response = await fetch(upstream, {
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        Authorization: `Bearer ${seedanceApiKey}`,
       },
     });
 

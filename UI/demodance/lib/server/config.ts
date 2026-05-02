@@ -47,6 +47,11 @@ export function readGeminiApiKeyOverride(request: Request): string {
   return headerValue.trim();
 }
 
+export function readSeedanceApiKeyOverride(request: Request): string {
+  const headerValue = request.headers.get("x-seedance-api-key") ?? "";
+  return headerValue.trim();
+}
+
 const KIMI_K25_BASE_URL = "https://kimi.ionrouter.io/v1";
 
 export function resolveIonRouterBaseUrlByModel(model: string | undefined, fallbackBaseUrl: string): string {

@@ -1,4 +1,4 @@
-import { readBrowserGeminiApiKey, readBrowserOpenAIApiKey } from "./browser-settings";
+import { readBrowserGeminiApiKey, readBrowserOpenAIApiKey, readBrowserSeedanceApiKey } from "./browser-settings";
 
 type ApiErrorPayload = {
   error?: unknown;
@@ -23,12 +23,14 @@ function readErrorMessage(data: unknown, fallback: string): string {
 export async function postJson<TResponse>(url: string, body: unknown, fallbackError: string): Promise<TResponse> {
   const openaiApiKey = readBrowserOpenAIApiKey();
   const geminiApiKey = readBrowserGeminiApiKey();
+  const seedanceApiKey = readBrowserSeedanceApiKey();
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(openaiApiKey ? { "x-openai-api-key": openaiApiKey } : {}),
       ...(geminiApiKey ? { "x-gemini-api-key": geminiApiKey } : {}),
+      ...(seedanceApiKey ? { "x-seedance-api-key": seedanceApiKey } : {}),
     },
     body: JSON.stringify(body),
   });
