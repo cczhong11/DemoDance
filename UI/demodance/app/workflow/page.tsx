@@ -83,7 +83,7 @@ export default function WorkflowPage() {
     setChatError(null);
 
     try {
-      const prompt = buildSuggestPrompt(locale, activeStep, getStepScript(activeStep.id));
+      const prompt = buildSuggestPrompt(locale, projectName, activeStep, getStepScript(activeStep.id));
       const text = await callJsonTextChat(prompt);
       const { fields, script } = readSuggestUpdates(activeStep, text);
       fillStepFields(activeStep.id, fields);
@@ -124,7 +124,7 @@ export default function WorkflowPage() {
     setChat((prev) => [...prev, { role: "user", text: content }]);
 
     try {
-      const reply = await callTextChat(buildChatPrompt(activeStep, content));
+      const reply = await callTextChat(buildChatPrompt(projectName, activeStep, content));
       setChat((prev) => [...prev, { role: "ai", text: reply }]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -182,7 +182,7 @@ export default function WorkflowPage() {
     setChatError(null);
 
     try {
-      const prompt = buildScriptPrompt(locale, activeStep, getStepScript(activeStep.id));
+      const prompt = buildScriptPrompt(locale, projectName, activeStep, getStepScript(activeStep.id));
       const text = await callJsonTextChat(prompt);
       const { script } = readSuggestUpdates(activeStep, text);
       if (!script) {

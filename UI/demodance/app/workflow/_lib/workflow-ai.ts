@@ -63,11 +63,32 @@ function stepGuidance(stepId: StepId): string {
   return guidance[stepId];
 }
 
-export function buildSuggestPrompt(locale: "en" | "zh", activeStep: Step, currentScript: string): string {
+function buildProjectPromptContext(projectName: string): string[] {
+  const normalizedName = projectName.trim();
+  if (normalizedName) {
+    return [
+      "You are a product storytelling copilot helping refine materials for the current project.",
+      `Project name: ${normalizedName}`,
+      "Keep suggestions tightly aligned with this specific project and its provided details.",
+    ];
+  }
+
+  return [
+    "You are a product storytelling copilot helping refine materials for the current project.",
+    "No confirmed project name yet. Stay grounded in the provided step details and avoid inventing branding.",
+  ];
+}
+
+export function buildSuggestPrompt(
+  locale: "en" | "zh",
+  projectName: string,
+  activeStep: Step,
+  currentScript: string,
+): string {
   const schema = activeStep.fields.map((field) => `  "${field.key}": "string"`).join(",\n");
   const current = activeStep.fields.map((field) => `${field.label}: ${field.value || "(empty)"}`).join("\n");
   return [
-    "You are DemoDance copilot.",
+    ...buildProjectPromptContext(projectName),
     "Return only JSON object, no markdown.",
     `Locale: ${locale}`,
     locale === "zh" ? "All field values and script must be written in Chinese." : "All field values and script must be written in English.",
@@ -87,10 +108,15 @@ export function buildSuggestPrompt(locale: "en" | "zh", activeStep: Step, curren
   ].join("\n\n");
 }
 
-export function buildScriptPrompt(locale: "en" | "zh", activeStep: Step, currentScript: string): string {
+export function buildScriptPrompt(
+  locale: "en" | "zh",
+  projectName: string,
+  activeStep: Step,
+  currentScript: string,
+): string {
   const context = activeStep.fields.map((field) => `${field.label}: ${field.value || "(empty)"}`).join("\n");
   return [
-    "You are DemoDance copilot.",
+    ...buildProjectPromptContext(projectName),
     "Return only JSON object, no markdown.",
     `Locale: ${locale}`,
     locale === "zh" ? "Write the script in Chinese." : "Write the script in English.",
@@ -127,10 +153,10 @@ export function readSuggestUpdates(activeStep: Step, rawText: string): { fields:
   };
 }
 
-export function buildChatPrompt(activeStep: Step, content: string): string {
+export function buildChatPrompt(projectName: string, activeStep: Step, content: string): string {
   const context = activeStep.fields.map((field) => `${field.label}: ${field.value || "(empty)"}`).join("\n");
   return [
-    "You are DemoDance copilot.",
+    ...buildProjectPromptContext(projectName),
     `Current step: ${activeStep.title}`,
     "Current field values:",
     context,
@@ -141,8 +167,9 @@ export function buildChatPrompt(activeStep: Step, content: string): string {
 }
 
 export function buildLogoPrompt(name: string, slogan: string): string {
+  const productName = name.trim() || "the product";
   return [
-    `Create a clean, modern app logo for a product named "${name || "DemoDance"}".`,
+    `Create a clean, modern app logo for a product named "${productName}".`,
     slogan ? `Tagline/context: ${slogan}.` : "",
     "Style: minimal, bold, high contrast, icon-first mark, centered with generous safe margin.",
     "No readable text, no letters, no words, no complex text blocks.",
